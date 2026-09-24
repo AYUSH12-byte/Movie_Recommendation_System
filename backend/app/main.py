@@ -4,6 +4,10 @@ from app.api.routes.recommendations import (
     router as recommendation_router
 )
 
+from app.api.routes.auth import (
+    router as auth_router
+)
+
 from app.database.database import (
     check_database_connection
 )
@@ -24,9 +28,13 @@ app = FastAPI(
 create_indexes()
 
 
-# Recommendation routes
+# API routes
 app.include_router(
     recommendation_router
+)
+
+app.include_router(
+    auth_router
 )
 
 
