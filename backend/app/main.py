@@ -8,12 +8,20 @@ from app.database.database import (
     check_database_connection
 )
 
+from app.database.indexes import (
+    create_indexes
+)
+
 
 app = FastAPI(
     title="Movie Recommendation System API",
     description="AI-powered movie recommendation system",
     version="1.0.0"
 )
+
+
+# Create MongoDB indexes
+create_indexes()
 
 
 # Recommendation routes
