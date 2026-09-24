@@ -4,6 +4,10 @@ from app.api.routes.recommendations import (
     router as recommendation_router
 )
 
+from app.database.database import (
+    check_database_connection
+)
+
 
 app = FastAPI(
     title="Movie Recommendation System API",
@@ -12,10 +16,7 @@ app = FastAPI(
 )
 
 
-# ==========================================
-# ROUTES
-# ==========================================
-
+# Recommendation routes
 app.include_router(
     recommendation_router
 )
@@ -23,7 +24,6 @@ app.include_router(
 
 @app.get("/")
 def root():
-
     return {
         "message": "Movie Recommendation System API is running"
     }
@@ -32,7 +32,10 @@ def root():
 @app.get("/api/health")
 def health_check():
 
+    database_status = check_database_connection()
+
     return {
         "status": "success",
-        "message": "Backend is healthy"
+        "backend": "healthy",
+        "database": database_status
     }
