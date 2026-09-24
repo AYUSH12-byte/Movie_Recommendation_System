@@ -7,9 +7,12 @@ venv/
 # Environment
 .env
 
-# ML
-*.pkl
-*.joblib
+# ML datasets
+ml-model/dataset/*.csv
+
+# Trained ML models
+ml-model/models/*.pkl
+ml-model/models/*.joblib
 
 # Node
 node_modules/
