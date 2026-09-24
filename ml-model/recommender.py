@@ -1,4 +1,7 @@
+import os
+import pickle
 import pandas as pd
+
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
@@ -7,20 +10,19 @@ class MovieRecommender:
 
     def __init__(self, dataset_path="dataset/movies.csv"):
 
-        print("Loading movie dataset...")
-
         self.movies = pd.read_csv(dataset_path)
 
         self.movies["genres"] = self.movies["genres"].fillna("")
         self.movies["title"] = self.movies["title"].fillna("")
 
-        # Combine title and genres
+        # Combine movie title and genres
         self.movies["content"] = (
-            self.movies["title"] + " " + self.movies["genres"]
+            self.movies["title"]
+            + " "
+            + self.movies["genres"]
         )
 
-        print("Creating TF-IDF vectors...")
-
+        # TF-IDF Vectorizer
         self.vectorizer = TfidfVectorizer(
             stop_words="english"
         )
@@ -29,39 +31,39 @@ class MovieRecommender:
             self.movies["content"]
         )
 
-        # Movie title -> dataframe index
+        # Movie title -> index
         self.movie_indices = pd.Series(
             self.movies.index,
             index=self.movies["title"]
         ).drop_duplicates()
 
-        print("Recommendation engine ready!")
-
-
-    def recommend(self, movie_title, number_of_recommendations=10):
+    def recommend(
+        self,
+        movie_title,
+        number_of_recommendations=10
+    ):
 
         if movie_title not in self.movie_indices:
-            print(f"Movie not found: {movie_title}")
             return []
 
         movie_index = self.movie_indices[movie_title]
 
         # Calculate similarity ONLY for selected movie
-        movie_vector = self.movie_vectors[movie_index]
-
         similarity_scores = cosine_similarity(
-            movie_vector,
+            self.movie_vectors[movie_index],
             self.movie_vectors
         ).flatten()
 
-        # Get highest similarity indexes
-        similar_indexes = similarity_scores.argsort()[
-            ::-1
-        ][1:number_of_recommendations + 1]
+        # Get movie indexes sorted by similarity
+        similar_indices = similarity_scores.argsort()[::-1]
 
         recommendations = []
 
-        for index in similar_indexes:
+        for index in similar_indices:
+
+            # Skip the selected movie
+            if index == movie_index:
+                continue
 
             recommendations.append({
                 "movieId": int(
@@ -75,12 +77,41 @@ class MovieRecommender:
                 )
             })
 
+            if len(recommendations) >= number_of_recommendations:
+                break
+
         return recommendations
+
+    def save_model(
+        self,
+        model_path="models/movie_recommender.pkl"
+    ):
+
+        os.makedirs(
+            os.path.dirname(model_path),
+            exist_ok=True
+        )
+
+        model_data = {
+            "movies": self.movies,
+            "vectorizer": self.vectorizer,
+            "movie_vectors": self.movie_vectors,
+            "movie_indices": self.movie_indices,
+        }
+
+        with open(model_path, "wb") as file:
+            pickle.dump(model_data, file)
+
+        print(f"Model saved to: {model_path}")
 
 
 if __name__ == "__main__":
 
     recommender = MovieRecommender()
+
+    print(
+        f"Loaded {len(recommender.movies)} movies."
+    )
 
     movie = "Toy Story (1995)"
 
@@ -94,9 +125,10 @@ if __name__ == "__main__":
     )
 
     for item in recommendations:
-
         print(
             f"{item['title']} "
             f"| {item['genres']} "
             f"| Score: {item['similarity_score']}"
         )
+
+    recommender.save_model()
