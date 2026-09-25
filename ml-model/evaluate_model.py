@@ -1,8 +1,6 @@
-import os
 import random
 
 import pandas as pd
-import matplotlib.pyplot as plt
 
 from recommender import MovieRecommender
 
@@ -20,21 +18,147 @@ MAX_USERS = 100
 
 RANDOM_SEED = 42
 
-OUTPUT_CSV = "evaluation_results.csv"
-OUTPUT_CHART = "evaluation_results.png"
+
+# PRECISION@K
+
+def precision_at_k(
+    recommended_movies,
+    relevant_movies,
+    k=10
+):
+    """
+    Precision@K:
+
+    Measures how many recommended movies
+    are relevant among the top K results.
+    """
+
+    if not recommended_movies:
+        return 0.0
+
+    recommended_movies = (
+        recommended_movies[:k]
+    )
+
+    recommended_ids = {
+        int(movie["movieId"])
+        for movie in recommended_movies
+    }
+
+    relevant_ids = {
+        int(movie_id)
+        for movie_id in relevant_movies
+    }
+
+    hits = (
+        recommended_ids
+        &
+        relevant_ids
+    )
+
+    return (
+        len(hits)
+        /
+        len(recommended_movies)
+    )
 
 
-# CONTENT-BASED USER RECOMMENDATIONS
+# RECALL@K
 
-def get_content_based_recommendations(
+def recall_at_k(
+    recommended_movies,
+    relevant_movies,
+    k=10
+):
+    """
+    Recall@K:
+
+    Measures how many relevant movies
+    were successfully recommended.
+    """
+
+    if not relevant_movies:
+        return 0.0
+
+    recommended_movies = (
+        recommended_movies[:k]
+    )
+
+    recommended_ids = {
+        int(movie["movieId"])
+        for movie in recommended_movies
+    }
+
+    relevant_ids = {
+        int(movie_id)
+        for movie_id in relevant_movies
+    }
+
+    hits = (
+        recommended_ids
+        &
+        relevant_ids
+    )
+
+    return (
+        len(hits)
+        /
+        len(relevant_ids)
+    )
+
+
+# HIT RATE@K
+
+def hit_rate_at_k(
+    recommended_movies,
+    relevant_movies,
+    k=10
+):
+    """
+    Hit Rate@K:
+
+    Returns 1 if at least one relevant
+    movie appears in the top K results.
+    Otherwise returns 0.
+    """
+
+    if not recommended_movies:
+        return 0.0
+
+    recommended_movies = (
+        recommended_movies[:k]
+    )
+
+    recommended_ids = {
+        int(movie["movieId"])
+        for movie in recommended_movies
+    }
+
+    relevant_ids = {
+        int(movie_id)
+        for movie_id in relevant_movies
+    }
+
+    return (
+        1.0
+        if recommended_ids.intersection(
+            relevant_ids
+        )
+        else 0.0
+    )
+
+
+# CONTENT-BASED RECOMMENDATIONS
+
+def get_content_recommendations(
     recommender,
     train_ratings,
     user_id,
-    number_of_recommendations
+    k
 ):
     """
     Generate content-based recommendations
-    using the movies liked by the user.
+    using movies liked by the user.
     """
 
     user_ratings = train_ratings[
@@ -48,16 +172,23 @@ def get_content_based_recommendations(
     if liked_movies.empty:
         return []
 
-    recommendation_scores = {}
-
+    # Movies already seen by user
     rated_movie_ids = set(
-        user_ratings["movieId"].astype(int)
+        user_ratings["movieId"]
+        .astype(int)
+        .tolist()
     )
 
-    for _, rating in liked_movies.iterrows():
+    recommendation_scores = {}
+
+    # Generate recommendations from
+    # each movie the user liked
+    for _, rating_row in (
+        liked_movies.iterrows()
+    ):
 
         movie_id = int(
-            rating["movieId"]
+            rating_row["movieId"]
         )
 
         movie = recommender.get_movie_by_id(
@@ -67,12 +198,12 @@ def get_content_based_recommendations(
         if movie is None:
             continue
 
-        movie_title = movie["title"]
-
-        recommendations = recommender.recommend(
-            movie_title=movie_title,
-            number_of_recommendations=(
-                number_of_recommendations * 5
+        recommendations = (
+            recommender.recommend(
+                movie_title=movie["title"],
+                number_of_recommendations=(
+                    k * 5
+                )
             )
         )
 
@@ -82,120 +213,221 @@ def get_content_based_recommendations(
                 recommendation["movieId"]
             )
 
-            if recommended_movie_id in rated_movie_ids:
+            # Don't recommend movies
+            # already rated by the user.
+            if (
+                recommended_movie_id
+                in rated_movie_ids
+            ):
                 continue
 
             similarity_score = float(
                 recommendation.get(
                     "similarity_score",
-                    0
+                    0.0
                 )
             )
 
-            current_score = recommendation_scores.get(
-                recommended_movie_id,
-                0
+            # Keep strongest similarity
+            # if multiple liked movies
+            # recommend the same movie.
+            previous_score = (
+                recommendation_scores.get(
+                    recommended_movie_id,
+                    0.0
+                )
             )
 
             recommendation_scores[
                 recommended_movie_id
             ] = max(
-                current_score,
+                previous_score,
                 similarity_score
             )
 
+    # Sort by similarity
     sorted_recommendations = sorted(
         recommendation_scores.items(),
         key=lambda item: item[1],
         reverse=True
     )
 
-    return [
-        movie_id
-        for movie_id, _ in sorted_recommendations[
-            :number_of_recommendations
-        ]
-    ]
+    results = []
+
+    for movie_id, score in (
+        sorted_recommendations[:k]
+    ):
+
+        movie = recommender.get_movie_by_id(
+            movie_id
+        )
+
+        if movie is None:
+            continue
+
+        results.append({
+            "movieId": movie["movieId"],
+            "title": movie["title"],
+            "genres": movie["genres"],
+            "similarity_score": round(
+                float(score),
+                4
+            )
+        })
+
+    return results
 
 
-# HYBRID USER RECOMMENDATIONS
+# HYBRID RECOMMENDATIONS
 
 def get_hybrid_recommendations(
     recommender,
     train_ratings,
     user_id,
-    number_of_recommendations
+    k
 ):
     """
-    Generate recommendations using the
-    hybrid recommendation engine.
+    Generate recommendations using
+    the hybrid recommendation engine.
     """
 
     recommendations = (
         recommender.recommend_for_user(
-            user_id=str(user_id),
+            user_id=user_id,
             ratings=train_ratings,
-            number_of_recommendations=(
-                number_of_recommendations
-            )
+            number_of_recommendations=k
         )
     )
 
-    return [
-        int(recommendation["movieId"])
-        for recommendation in recommendations
-    ]
+    return recommendations
 
 
-# METRIC CALCULATION
+# EVALUATE ONE USER
 
-def calculate_metrics(
-    recommended_movie_ids,
-    relevant_movie_ids,
+def evaluate_user(
+    recommender,
+    ratings,
+    user_id,
     k
 ):
     """
-    Calculate Precision@K, Recall@K
-    and Hit Rate@K.
+    Evaluate one user.
+
+    One liked movie is held out from the
+    training data.
+
+    The recommender must try to recover
+    the hidden movie.
     """
 
-    recommended_set = set(
-        recommended_movie_ids[:k]
+    user_ratings = ratings[
+        ratings["userId"] == user_id
+    ].copy()
+
+    if (
+        len(user_ratings)
+        < MIN_USER_RATINGS
+    ):
+        return None
+
+    # Movies considered relevant
+    liked_ratings = user_ratings[
+        user_ratings["rating"] >= 4.0
+    ]
+
+    if liked_ratings.empty:
+        return None
+
+    # HOLD OUT ONE LIKED MOVIE
+
+    test_rating = liked_ratings.sample(
+        n=1,
+        random_state=RANDOM_SEED
     )
 
-    relevant_set = set(
-        relevant_movie_ids
+    test_movie_id = int(
+        test_rating.iloc[0]["movieId"]
     )
 
-    hits = len(
-        recommended_set.intersection(
-            relevant_set
+    relevant_movies = [
+        test_movie_id
+    ]
+
+    # REMOVE TEST MOVIE FROM TRAINING DATA
+
+    train_ratings = user_ratings[
+        user_ratings["movieId"]
+        != test_movie_id
+    ].copy()
+
+    # CONTENT-BASED
+
+    content_recommendations = (
+        get_content_recommendations(
+            recommender=recommender,
+            train_ratings=train_ratings,
+            user_id=user_id,
+            k=k
         )
     )
 
-    precision = (
-        hits / k
-        if k > 0
-        else 0
+    content_precision = precision_at_k(
+        content_recommendations,
+        relevant_movies,
+        k
     )
 
-    recall = (
-        hits / len(relevant_set)
-        if len(relevant_set) > 0
-        else 0
+    content_recall = recall_at_k(
+        content_recommendations,
+        relevant_movies,
+        k
     )
 
-    hit_rate = (
-        1
-        if hits > 0
-        else 0
+    content_hit_rate = hit_rate_at_k(
+        content_recommendations,
+        relevant_movies,
+        k
+    )
+
+    # HYBRID
+
+    hybrid_recommendations = (
+        get_hybrid_recommendations(
+            recommender=recommender,
+            train_ratings=train_ratings,
+            user_id=user_id,
+            k=k
+        )
+    )
+
+    hybrid_precision = precision_at_k(
+        hybrid_recommendations,
+        relevant_movies,
+        k
+    )
+
+    hybrid_recall = recall_at_k(
+        hybrid_recommendations,
+        relevant_movies,
+        k
+    )
+
+    hybrid_hit_rate = hit_rate_at_k(
+        hybrid_recommendations,
+        relevant_movies,
+        k
     )
 
     return {
-        "precision": precision,
-        "recall": recall,
-        "hit_rate": hit_rate,
-        "hits": hits
+        "content_precision": content_precision,
+        "content_recall": content_recall,
+        "content_hit_rate": content_hit_rate,
+        "hybrid_precision": hybrid_precision,
+        "hybrid_recall": hybrid_recall,
+        "hybrid_hit_rate": hybrid_hit_rate,
+        "content_recommendations": content_recommendations,
+        "hybrid_recommendations": hybrid_recommendations,
+        "test_movie_id": test_movie_id
     }
 
 
@@ -204,19 +436,304 @@ def calculate_metrics(
 def evaluate_model(
     recommender,
     ratings,
-    k,
-    max_users=MAX_USERS
+    k
 ):
     """
-    Evaluate content-based and hybrid
-    recommendation approaches.
+    Evaluate the recommendation model
+    across multiple users.
     """
 
     random.seed(
         RANDOM_SEED
     )
 
-    ratings = ratings.copy()
+    # FIND ELIGIBLE USERS
+
+    eligible_users = []
+
+    for user_id, user_ratings in (
+        ratings.groupby("userId")
+    ):
+
+        if (
+            len(user_ratings)
+            < MIN_USER_RATINGS
+        ):
+            continue
+
+        liked_movies = user_ratings[
+            user_ratings["rating"] >= 4.0
+        ]
+
+        if liked_movies.empty:
+            continue
+
+        eligible_users.append(
+            user_id
+        )
+
+    # Shuffle users for reproducibility
+    random.shuffle(
+        eligible_users
+    )
+
+    # Limit evaluation size
+    eligible_users = eligible_users[
+        :MAX_USERS
+    ]
+
+    print(
+        f"\nUsers selected for evaluation: "
+        f"{len(eligible_users)}"
+    )
+
+    # METRIC STORAGE
+
+    content_precisions = []
+    content_recalls = []
+    content_hit_rates = []
+
+    hybrid_precisions = []
+    hybrid_recalls = []
+    hybrid_hit_rates = []
+
+    evaluated_users = 0
+
+    # EVALUATE USERS
+
+    for counter, user_id in enumerate(
+        eligible_users,
+        start=1
+    ):
+
+        result = evaluate_user(
+            recommender=recommender,
+            ratings=ratings,
+            user_id=user_id,
+            k=k
+        )
+
+        if result is None:
+            continue
+
+        content_precisions.append(
+            result["content_precision"]
+        )
+
+        content_recalls.append(
+            result["content_recall"]
+        )
+
+        content_hit_rates.append(
+            result["content_hit_rate"]
+        )
+
+        hybrid_precisions.append(
+            result["hybrid_precision"]
+        )
+
+        hybrid_recalls.append(
+            result["hybrid_recall"]
+        )
+
+        hybrid_hit_rates.append(
+            result["hybrid_hit_rate"]
+        )
+
+        evaluated_users += 1
+
+        if counter % 10 == 0:
+
+            print(
+                f"Processed "
+                f"{counter}/"
+                f"{len(eligible_users)} users..."
+            )
+
+    # CALCULATE AVERAGES
+
+    results = {
+
+        "K": k,
+
+        "Users Evaluated":
+            evaluated_users,
+
+        "Content-Based Precision@K":
+            (
+                sum(content_precisions)
+                /
+                len(content_precisions)
+                if content_precisions
+                else 0.0
+            ),
+
+        "Content-Based Recall@K":
+            (
+                sum(content_recalls)
+                /
+                len(content_recalls)
+                if content_recalls
+                else 0.0
+            ),
+
+        "Content-Based Hit Rate@K":
+            (
+                sum(content_hit_rates)
+                /
+                len(content_hit_rates)
+                if content_hit_rates
+                else 0.0
+            ),
+
+        "Hybrid Precision@K":
+            (
+                sum(hybrid_precisions)
+                /
+                len(hybrid_precisions)
+                if hybrid_precisions
+                else 0.0
+            ),
+
+        "Hybrid Recall@K":
+            (
+                sum(hybrid_recalls)
+                /
+                len(hybrid_recalls)
+                if hybrid_recalls
+                else 0.0
+            ),
+
+        "Hybrid Hit Rate@K":
+            (
+                sum(hybrid_hit_rates)
+                /
+                len(hybrid_hit_rates)
+                if hybrid_hit_rates
+                else 0.0
+            )
+    }
+
+    return results
+
+
+# PRINT RESULTS
+
+def print_results(
+    results
+):
+    """
+    Print evaluation results.
+    """
+
+    print(
+        "\n"
+        + "=" * 70
+    )
+
+    print(
+        "MODEL EVALUATION RESULTS"
+    )
+
+    print(
+        "=" * 70
+    )
+
+    print(
+        f"K: {results['K']}"
+    )
+
+    print(
+        f"Users Evaluated: "
+        f"{results['Users Evaluated']}"
+    )
+
+    print(
+        "\nCONTENT-BASED MODEL"
+    )
+
+    print(
+        f"Precision@{results['K']}: "
+        f"{results['Content-Based Precision@K']:.4f}"
+    )
+
+    print(
+        f"Recall@{results['K']}: "
+        f"{results['Content-Based Recall@K']:.4f}"
+    )
+
+    print(
+        f"Hit Rate@{results['K']}: "
+        f"{results['Content-Based Hit Rate@K']:.4f}"
+    )
+
+    print(
+        "\nHYBRID MODEL"
+    )
+
+    print(
+        f"Precision@{results['K']}: "
+        f"{results['Hybrid Precision@K']:.4f}"
+    )
+
+    print(
+        f"Recall@{results['K']}: "
+        f"{results['Hybrid Recall@K']:.4f}"
+    )
+
+    print(
+        f"Hit Rate@{results['K']}: "
+        f"{results['Hybrid Hit Rate@K']:.4f}"
+    )
+
+    print(
+        "=" * 70
+    )
+
+
+# MAIN
+
+def main():
+
+    print(
+        "\n"
+        + "=" * 70
+    )
+
+    print(
+        "MOVIE RECOMMENDATION SYSTEM"
+    )
+
+    print(
+        "AI MODEL EVALUATION"
+    )
+
+    print(
+        "=" * 70
+    )
+
+    # LOAD RECOMMENDER
+
+    print(
+        "\nLoading recommendation engine..."
+    )
+
+    recommender = MovieRecommender(
+        dataset_path=DATASET_PATH,
+        ratings_path=RATINGS_PATH
+    )
+
+    # LOAD RATINGS
+
+    print(
+        "\nLoading ratings dataset..."
+    )
+
+    ratings = pd.read_csv(
+        RATINGS_PATH
+    )
+
+    # NORMALIZE RATINGS
 
     ratings["userId"] = pd.to_numeric(
         ratings["userId"],
@@ -241,505 +758,22 @@ def evaluate_model(
         ]
     )
 
-    eligible_users = []
-
-    for user_id, user_ratings in ratings.groupby(
-        "userId"
-    ):
-
-        if len(user_ratings) < MIN_USER_RATINGS:
-            continue
-
-        liked_ratings = user_ratings[
-            user_ratings["rating"] >= 4.0
-        ]
-
-        if liked_ratings.empty:
-            continue
-
-        eligible_users.append(
-            user_id
-        )
-
-    random.shuffle(
-        eligible_users
+    ratings["userId"] = (
+        ratings["userId"]
+        .astype(int)
     )
 
-    eligible_users = eligible_users[
-        :max_users
-    ]
-
-    print(
-        f"\nEvaluating {len(eligible_users)} users..."
-    )
-
-    content_precisions = []
-    content_recalls = []
-    content_hit_rates = []
-
-    hybrid_precisions = []
-    hybrid_recalls = []
-    hybrid_hit_rates = []
-
-    content_recommendation_ids = set()
-    hybrid_recommendation_ids = set()
-
-    evaluated_users = 0
-
-    for index, user_id in enumerate(
-        eligible_users,
-        start=1
-    ):
-
-        user_ratings = ratings[
-            ratings["userId"] == user_id
-        ].copy()
-
-        liked_ratings = user_ratings[
-            user_ratings["rating"] >= 4.0
-        ]
-
-        if liked_ratings.empty:
-            continue
-
-        # HOLD OUT ONE LIKED MOVIE
-
-        test_rating = liked_ratings.sample(
-            n=1,
-            random_state=RANDOM_SEED
-        )
-
-        test_movie_id = int(
-            test_rating.iloc[0]["movieId"]
-        )
-
-        relevant_movie_ids = [
-            test_movie_id
-        ]
-
-        train_ratings = user_ratings[
-            user_ratings["movieId"]
-            != test_movie_id
-        ].copy()
-
-        # CONTENT-BASED
-
-        content_recommendations = (
-            get_content_based_recommendations(
-                recommender=recommender,
-                train_ratings=train_ratings,
-                user_id=user_id,
-                number_of_recommendations=k
-            )
-        )
-
-        content_metrics = calculate_metrics(
-            recommended_movie_ids=(
-                content_recommendations
-            ),
-            relevant_movie_ids=(
-                relevant_movie_ids
-            ),
-            k=k
-        )
-
-        content_precisions.append(
-            content_metrics["precision"]
-        )
-
-        content_recalls.append(
-            content_metrics["recall"]
-        )
-
-        content_hit_rates.append(
-            content_metrics["hit_rate"]
-        )
-
-        content_recommendation_ids.update(
-            content_recommendations
-        )
-
-        # HYBRID
-
-        hybrid_recommendations = (
-            get_hybrid_recommendations(
-                recommender=recommender,
-                train_ratings=train_ratings,
-                user_id=user_id,
-                number_of_recommendations=k
-            )
-        )
-
-        hybrid_metrics = calculate_metrics(
-            recommended_movie_ids=(
-                hybrid_recommendations
-            ),
-            relevant_movie_ids=(
-                relevant_movie_ids
-            ),
-            k=k
-        )
-
-        hybrid_precisions.append(
-            hybrid_metrics["precision"]
-        )
-
-        hybrid_recalls.append(
-            hybrid_metrics["recall"]
-        )
-
-        hybrid_hit_rates.append(
-            hybrid_metrics["hit_rate"]
-        )
-
-        hybrid_recommendation_ids.update(
-            hybrid_recommendations
-        )
-
-        evaluated_users += 1
-
-        if index % 10 == 0:
-
-            print(
-                f"Processed {index}/"
-                f"{len(eligible_users)} users..."
-            )
-
-    # COVERAGE
-
-    total_movies = len(
-        recommender.movies
-    )
-
-    content_coverage = (
-        len(content_recommendation_ids)
-        / total_movies
-        if total_movies > 0
-        else 0
-    )
-
-    hybrid_coverage = (
-        len(hybrid_recommendation_ids)
-        / total_movies
-        if total_movies > 0
-        else 0
-    )
-
-    # FINAL RESULTS
-
-    results = {
-        "K": k,
-
-        "Users Evaluated": evaluated_users,
-
-        "Content-Based Precision@K": (
-            sum(content_precisions)
-            / len(content_precisions)
-            if content_precisions
-            else 0
-        ),
-
-        "Content-Based Recall@K": (
-            sum(content_recalls)
-            / len(content_recalls)
-            if content_recalls
-            else 0
-        ),
-
-        "Content-Based Hit Rate@K": (
-            sum(content_hit_rates)
-            / len(content_hit_rates)
-            if content_hit_rates
-            else 0
-        ),
-
-        "Content-Based Coverage": (
-            content_coverage
-        ),
-
-        "Hybrid Precision@K": (
-            sum(hybrid_precisions)
-            / len(hybrid_precisions)
-            if hybrid_precisions
-            else 0
-        ),
-
-        "Hybrid Recall@K": (
-            sum(hybrid_recalls)
-            / len(hybrid_recalls)
-            if hybrid_recalls
-            else 0
-        ),
-
-        "Hybrid Hit Rate@K": (
-            sum(hybrid_hit_rates)
-            / len(hybrid_hit_rates)
-            if hybrid_hit_rates
-            else 0
-        ),
-
-        "Hybrid Coverage": (
-            hybrid_coverage
-        )
-    }
-
-    return results
-
-
-# DISPLAY RESULTS
-
-def display_results(results_df):
-
-    print(
-        "\n"
-        + "=" * 80
+    ratings["movieId"] = (
+        ratings["movieId"]
+        .astype(int)
     )
 
     print(
-        "MODEL EVALUATION RESULTS"
+        f"Ratings loaded: "
+        f"{len(ratings)}"
     )
 
-    print(
-        "=" * 80
-    )
-
-    for _, row in results_df.iterrows():
-
-        print(
-            f"\nK = {int(row['K'])}"
-        )
-
-        print(
-            f"Users Evaluated: "
-            f"{int(row['Users Evaluated'])}"
-        )
-
-        print(
-            "\nContent-Based:"
-        )
-
-        print(
-            f"  Precision@K: "
-            f"{row['Content-Based Precision@K']:.4f}"
-        )
-
-        print(
-            f"  Recall@K: "
-            f"{row['Content-Based Recall@K']:.4f}"
-        )
-
-        print(
-            f"  Hit Rate@K: "
-            f"{row['Content-Based Hit Rate@K']:.4f}"
-        )
-
-        print(
-            f"  Coverage: "
-            f"{row['Content-Based Coverage']:.4f}"
-        )
-
-        print(
-            "\nHybrid:"
-        )
-
-        print(
-            f"  Precision@K: "
-            f"{row['Hybrid Precision@K']:.4f}"
-        )
-
-        print(
-            f"  Recall@K: "
-            f"{row['Hybrid Recall@K']:.4f}"
-        )
-
-        print(
-            f"  Hit Rate@K: "
-            f"{row['Hybrid Hit Rate@K']:.4f}"
-        )
-
-        print(
-            f"  Coverage: "
-            f"{row['Hybrid Coverage']:.4f}"
-        )
-
-
-# CREATE COMPARISON CHART
-
-def create_comparison_chart(
-    results_df
-):
-
-    metrics = [
-        "Precision@K",
-        "Recall@K",
-        "Hit Rate@K"
-    ]
-
-    for metric in metrics:
-
-        plt.figure(
-            figsize=(8, 5)
-        )
-
-        x = range(
-            len(results_df)
-        )
-
-        width = 0.35
-
-        content_values = []
-
-        hybrid_values = []
-
-        for _, row in results_df.iterrows():
-
-            if metric == "Precision@K":
-
-                content_values.append(
-                    row[
-                        "Content-Based Precision@K"
-                    ]
-                )
-
-                hybrid_values.append(
-                    row[
-                        "Hybrid Precision@K"
-                    ]
-                )
-
-            elif metric == "Recall@K":
-
-                content_values.append(
-                    row[
-                        "Content-Based Recall@K"
-                    ]
-                )
-
-                hybrid_values.append(
-                    row[
-                        "Hybrid Recall@K"
-                    ]
-                )
-
-            else:
-
-                content_values.append(
-                    row[
-                        "Content-Based Hit Rate@K"
-                    ]
-                )
-
-                hybrid_values.append(
-                    row[
-                        "Hybrid Hit Rate@K"
-                    ]
-                )
-
-        content_positions = [
-            value - width / 2
-            for value in x
-        ]
-
-        hybrid_positions = [
-            value + width / 2
-            for value in x
-        ]
-
-        plt.bar(
-            content_positions,
-            content_values,
-            width,
-            label="Content-Based"
-        )
-
-        plt.bar(
-            hybrid_positions,
-            hybrid_values,
-            width,
-            label="Hybrid"
-        )
-
-        plt.xticks(
-            list(x),
-            [
-                f"K={int(k)}"
-                for k in results_df["K"]
-            ]
-        )
-
-        plt.ylabel(
-            metric
-        )
-
-        plt.xlabel(
-            "Recommendation List Size"
-        )
-
-        plt.title(
-            f"Content-Based vs Hybrid - {metric}"
-        )
-
-        plt.legend()
-
-        plt.tight_layout()
-
-        chart_path = (
-            f"evaluation_{metric.lower().replace('@', '_at_').replace(' ', '_')}.png"
-        )
-
-        plt.savefig(
-            chart_path,
-            dpi=300
-        )
-
-        plt.close()
-
-        print(
-            f"Chart saved: {chart_path}"
-        )
-
-
-# MAIN
-
-def main():
-
-    print(
-        "\n"
-        + "=" * 80
-    )
-
-    print(
-        "MOVIE RECOMMENDATION SYSTEM"
-    )
-
-    print(
-        "AI MODEL EVALUATION"
-    )
-
-    print(
-        "=" * 80
-    )
-
-    print(
-        "\nLoading recommendation engine..."
-    )
-
-    recommender = MovieRecommender(
-        dataset_path=DATASET_PATH,
-        ratings_path=RATINGS_PATH
-    )
-
-    print(
-        "\nLoading ratings..."
-    )
-
-    ratings = pd.read_csv(
-        RATINGS_PATH
-    )
-
-    print(
-        f"Ratings loaded: {len(ratings)}"
-    )
+    # RUN EVALUATION
 
     all_results = []
 
@@ -747,58 +781,87 @@ def main():
 
         print(
             "\n"
-            + "-" * 80
+            + "-" * 70
         )
 
         print(
-            f"Evaluating K={k}"
+            f"Evaluating K = {k}"
         )
 
         print(
-            "-" * 80
+            "-" * 70
         )
 
-        result = evaluate_model(
+        results = evaluate_model(
             recommender=recommender,
             ratings=ratings,
             k=k
         )
 
         all_results.append(
-            result
+            results
         )
+
+        print_results(
+            results
+        )
+
+    # SAVE RESULTS
 
     results_df = pd.DataFrame(
         all_results
     )
 
-    # SAVE RESULTS
+    output_file = (
+        "evaluation_results.csv"
+    )
 
     results_df.to_csv(
-        OUTPUT_CSV,
+        output_file,
         index=False
     )
 
     print(
-        f"\nEvaluation results saved to: "
-        f"{OUTPUT_CSV}"
+        f"\nResults saved to: "
+        f"{output_file}"
     )
 
-    # DISPLAY
+    # FINAL TABLE
 
-    display_results(
-        results_df
+    print(
+        "\n"
+        + "=" * 70
     )
 
-    # CHARTS
+    print(
+        "FINAL COMPARISON"
+    )
 
-    create_comparison_chart(
-        results_df
+    print(
+        "=" * 70
+    )
+
+    display_columns = [
+        "K",
+        "Content-Based Precision@K",
+        "Content-Based Recall@K",
+        "Content-Based Hit Rate@K",
+        "Hybrid Precision@K",
+        "Hybrid Recall@K",
+        "Hybrid Hit Rate@K"
+    ]
+
+    print(
+        results_df[
+            display_columns
+        ].to_string(
+            index=False
+        )
     )
 
     print(
         "\n"
-        + "=" * 80
+        + "=" * 70
     )
 
     print(
@@ -806,9 +869,12 @@ def main():
     )
 
     print(
-        "=" * 80
+        "=" * 70
     )
 
 
+# RUN
+
 if __name__ == "__main__":
+
     main()
