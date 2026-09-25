@@ -36,22 +36,20 @@ recommender = MovieRecommender(
 )
 
 
-# CONTENT-BASED RECOMMENDATIONS
+# CONTENT-BASED RECOMMENDATION
 
 def get_movie_recommendations(
     movie_title: str,
     limit: int = 10
 ):
 
-    recommendations = recommender.recommend(
+    return recommender.recommend(
         movie_title=movie_title,
         number_of_recommendations=limit
     )
 
-    return recommendations
 
-
-# PERSONALIZED RECOMMENDATIONS
+# PERSONALIZED HYBRID RECOMMENDATION
 
 def get_personalized_recommendations(
     user_id: str,
@@ -59,13 +57,14 @@ def get_personalized_recommendations(
     limit: int = 10
 ):
 
-    # Check user rating history
+    # No ratings
 
     if not ratings:
 
         return {
             "success": True,
             "hasProfile": False,
+            "recommendationType": "cold_start",
             "message": (
                 "Rate some movies to get "
                 "personalized recommendations."
@@ -92,9 +91,10 @@ def get_personalized_recommendations(
             return {
                 "success": False,
                 "hasProfile": False,
+                "recommendationType": "error",
                 "message": (
-                    f"Missing required rating field: "
-                    f"{column}"
+                    f"Missing required rating "
+                    f"field: {column}"
                 ),
                 "recommendations": []
             }
@@ -123,7 +123,7 @@ def get_personalized_recommendations(
         ]
     )
 
-    # Generate recommendations
+    # Generate hybrid recommendations
 
     recommendations = (
         recommender.recommend_for_user(
@@ -133,7 +133,7 @@ def get_personalized_recommendations(
         )
     )
 
-    # Add human-readable explanation
+    # Add explanation
 
     for recommendation in recommendations:
 
@@ -150,28 +150,41 @@ def get_personalized_recommendations(
             0
         )
 
+        popularity = recommendation.get(
+            "popularity_score",
+            0
+        )
+
         if source_title and source_rating:
 
             recommendation["reason"] = (
                 f"Recommended because you rated "
                 f"{source_title} "
-                f"{source_rating}/5, and this movie "
-                f"has a content similarity score of "
-                f"{similarity} with it."
+                f"{source_rating}/5, with a "
+                f"content similarity score of "
+                f"{similarity} and popularity "
+                f"score of {popularity}."
             )
 
         else:
 
             recommendation["reason"] = (
-                "Recommended based on similarity "
-                "with movies you rated highly."
+                "Recommended based on your "
+                "movie preferences, content "
+                "similarity, and popularity."
             )
 
     return {
         "success": True,
         "hasProfile": True,
+        "recommendationType": "hybrid",
+        "algorithm": {
+            "contentWeight": 0.60,
+            "preferenceWeight": 0.25,
+            "popularityWeight": 0.15
+        },
         "message": (
-            "Personalized recommendations "
+            "Hybrid personalized recommendations "
             "generated successfully."
         ),
         "recommendations": recommendations

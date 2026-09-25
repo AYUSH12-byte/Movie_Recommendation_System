@@ -9,30 +9,34 @@ from sklearn.metrics.pairwise import cosine_similarity
 
 class MovieRecommender:
 
-    # INITIALIZE MODEL
+    # INITIALIZATION
 
     def __init__(
         self,
         dataset_path="dataset/movies.csv"
     ):
 
+        print("Loading movie dataset...")
+
         self.movies = pd.read_csv(
             dataset_path
         )
 
-        # Handle missing values
+        # Clean movie data
 
         self.movies["genres"] = (
             self.movies["genres"]
             .fillna("")
+            .astype(str)
         )
 
         self.movies["title"] = (
             self.movies["title"]
             .fillna("")
+            .astype(str)
         )
 
-        # Create content field
+        # Create content features
 
         self.movies["content"] = (
             self.movies["title"]
@@ -40,7 +44,7 @@ class MovieRecommender:
             + self.movies["genres"]
         )
 
-        # TF-IDF Vectorizer
+        # TF-IDF
 
         self.vectorizer = TfidfVectorizer(
             stop_words="english"
@@ -52,12 +56,16 @@ class MovieRecommender:
             )
         )
 
-        # Movie title -> dataframe index
+        # Movie index
 
         self.movie_indices = pd.Series(
             self.movies.index,
             index=self.movies["title"]
         ).drop_duplicates()
+
+        print(
+            f"Loaded {len(self.movies)} movies."
+        )
 
     # CONTENT-BASED RECOMMENDATION
 
@@ -67,24 +75,26 @@ class MovieRecommender:
         number_of_recommendations=10
     ):
 
-        # Check movie exists
+        if number_of_recommendations < 1:
+            number_of_recommendations = 10
+
+        # Check movie
 
         if movie_title not in self.movie_indices:
-
             return []
 
         movie_index = self.movie_indices[
             movie_title
         ]
 
-        # Calculate cosine similarity
+        # Cosine similarity
 
         similarity_scores = cosine_similarity(
             self.movie_vectors[movie_index],
             self.movie_vectors
         ).flatten()
 
-        # Sort by similarity
+        # Sort
 
         similar_indices = (
             similarity_scores
@@ -93,31 +103,19 @@ class MovieRecommender:
 
         recommendations = []
 
-        # Build recommendations
-
         for index in similar_indices:
-
-            # Skip original movie
 
             if index == movie_index:
                 continue
 
+            movie = self.movies.iloc[index]
+
             recommendations.append({
-
                 "movieId": int(
-                    self.movies.iloc[index][
-                        "movieId"
-                    ]
+                    movie["movieId"]
                 ),
-
-                "title": self.movies.iloc[index][
-                    "title"
-                ],
-
-                "genres": self.movies.iloc[index][
-                    "genres"
-                ],
-
+                "title": movie["title"],
+                "genres": movie["genres"],
                 "similarity_score": round(
                     float(
                         similarity_scores[index]
@@ -134,7 +132,121 @@ class MovieRecommender:
 
         return recommendations
 
-    # PERSONALIZED RECOMMENDATION
+    # CALCULATE MOVIE POPULARITY
+
+    def calculate_popularity_scores(
+        self,
+        ratings
+    ):
+
+        if ratings is None or ratings.empty:
+            return {}
+
+        required_columns = [
+            "movieId",
+            "rating"
+        ]
+
+        for column in required_columns:
+
+            if column not in ratings.columns:
+                return {}
+
+        ratings = ratings.copy()
+
+        ratings["movieId"] = pd.to_numeric(
+            ratings["movieId"],
+            errors="coerce"
+        )
+
+        ratings["rating"] = pd.to_numeric(
+            ratings["rating"],
+            errors="coerce"
+        )
+
+        ratings = ratings.dropna(
+            subset=[
+                "movieId",
+                "rating"
+            ]
+        )
+
+        if ratings.empty:
+            return {}
+
+        # Calculate average rating
+
+        movie_statistics = (
+            ratings
+            .groupby("movieId")
+            .agg(
+                average_rating=(
+                    "rating",
+                    "mean"
+                ),
+                rating_count=(
+                    "rating",
+                    "count"
+                )
+            )
+            .reset_index()
+        )
+
+        # Popularity formula
+        #
+        # average rating × log(rating count + 1)
+
+        movie_statistics[
+            "popularity_score"
+        ] = (
+            movie_statistics[
+                "average_rating"
+            ]
+            *
+            __import__("numpy").log1p(
+                movie_statistics[
+                    "rating_count"
+                ]
+            )
+        )
+
+        # Normalize popularity to 0-1
+
+        max_score = (
+            movie_statistics[
+                "popularity_score"
+            ].max()
+        )
+
+        if max_score > 0:
+
+            movie_statistics[
+                "popularity_normalized"
+            ] = (
+                movie_statistics[
+                    "popularity_score"
+                ]
+                / max_score
+            )
+
+        else:
+
+            movie_statistics[
+                "popularity_normalized"
+            ] = 0.0
+
+        return dict(
+            zip(
+                movie_statistics[
+                    "movieId"
+                ].astype(int),
+                movie_statistics[
+                    "popularity_normalized"
+                ]
+            )
+        )
+
+    # PERSONALIZED HYBRID RECOMMENDATION
 
     def recommend_for_user(
         self,
@@ -143,8 +255,6 @@ class MovieRecommender:
         number_of_recommendations=10,
         minimum_rating=4.0
     ):
-
-        # Validate ratings
 
         if ratings is None:
             return []
@@ -184,8 +294,6 @@ class MovieRecommender:
             errors="coerce"
         )
 
-        # Remove invalid data
-
         ratings = ratings.dropna(
             subset=[
                 "userId",
@@ -194,11 +302,9 @@ class MovieRecommender:
             ]
         )
 
-        # Normalize current user ID
+        # Get current user's ratings
 
         user_id = str(user_id)
-
-        # Get current user's ratings
 
         user_ratings = ratings[
             ratings["userId"] == user_id
@@ -207,7 +313,7 @@ class MovieRecommender:
         if user_ratings.empty:
             return []
 
-        # Find highly rated movies
+        # Get liked movies
 
         liked_ratings = user_ratings[
             user_ratings["rating"]
@@ -220,15 +326,21 @@ class MovieRecommender:
         if liked_ratings.empty:
             return []
 
-        # Store recommendation scores
+        # Popularity scores
+
+        popularity_scores = (
+            self.calculate_popularity_scores(
+                ratings
+            )
+        )
+
+        # Recommendation storage
 
         recommendation_scores = {}
 
-        # PROCESS EACH LIKED MOVIE
+        # Generate recommendations from liked movies
 
-        for _, rating_row in (
-            liked_ratings.iterrows()
-        ):
+        for _, rating_row in liked_ratings.iterrows():
 
             source_movie_id = int(
                 rating_row["movieId"]
@@ -240,15 +352,17 @@ class MovieRecommender:
 
             # Find source movie
 
-            movie_rows = self.movies[
+            source_rows = self.movies[
                 self.movies["movieId"]
                 == source_movie_id
             ]
 
-            if movie_rows.empty:
+            if source_rows.empty:
                 continue
 
-            source_movie = movie_rows.iloc[0]
+            source_movie = (
+                source_rows.iloc[0]
+            )
 
             source_movie_title = (
                 source_movie["title"]
@@ -256,18 +370,16 @@ class MovieRecommender:
 
             # Get similar movies
 
-            similar_movies = self.recommend(
+            recommendations = self.recommend(
                 movie_title=source_movie_title,
                 number_of_recommendations=(
-                    number_of_recommendations
+                    number_of_recommendations * 3
                 )
             )
 
             # Process similar movies
 
-            for recommendation in (
-                similar_movies
-            ):
+            for recommendation in recommendations:
 
                 recommended_movie_id = int(
                     recommendation["movieId"]
@@ -279,20 +391,47 @@ class MovieRecommender:
                     ]
                 )
 
-                # Weighted recommendation score
+                # Rating preference score
                 #
-                # High user rating
-                #        ×
-                # similarity
-                #        =
-                # recommendation strength
+                # Convert 0.5-5 rating into 0-1
 
-                weighted_score = (
-                    similarity_score
-                    * user_rating
+                rating_preference_score = (
+                    user_rating / 5.0
                 )
 
-                # Create new recommendation
+                # Popularity score
+
+                popularity_score = float(
+                    popularity_scores.get(
+                        recommended_movie_id,
+                        0.0
+                    )
+                )
+
+                # HYBRID SCORE
+                #
+                # Content       = 60%
+                # User rating   = 25%
+                # Popularity    = 15%
+
+                hybrid_score = (
+                    (
+                        similarity_score
+                        * 0.60
+                    )
+                    +
+                    (
+                        rating_preference_score
+                        * 0.25
+                    )
+                    +
+                    (
+                        popularity_score
+                        * 0.15
+                    )
+                )
+
+                # Store recommendation
 
                 if (
                     recommended_movie_id
@@ -302,21 +441,19 @@ class MovieRecommender:
                     recommendation_scores[
                         recommended_movie_id
                     ] = {
-
-                        "score": 0.0,
-
+                        "hybrid_score": 0.0,
                         "similarity_score": (
                             similarity_score
                         ),
-
+                        "popularity_score": (
+                            popularity_score
+                        ),
                         "source_movie_id": (
                             source_movie_id
                         ),
-
                         "source_movie_title": (
                             source_movie_title
                         ),
-
                         "source_user_rating": (
                             user_rating
                         )
@@ -326,8 +463,8 @@ class MovieRecommender:
 
                 recommendation_scores[
                     recommended_movie_id
-                ]["score"] += (
-                    weighted_score
+                ]["hybrid_score"] += (
+                    hybrid_score
                 )
 
                 # Keep strongest source movie
@@ -364,7 +501,7 @@ class MovieRecommender:
                         user_rating
                     )
 
-        # REMOVE ALREADY RATED MOVIES
+        # Remove already-rated movies
 
         rated_movie_ids = set(
             user_ratings[
@@ -375,27 +512,23 @@ class MovieRecommender:
         )
 
         recommendation_scores = {
-
             movie_id: data
-
             for movie_id, data
             in recommendation_scores.items()
-
-            if movie_id
-            not in rated_movie_ids
+            if movie_id not in rated_movie_ids
         }
 
-        # SORT RECOMMENDATIONS
+        # Sort by hybrid score
 
         sorted_recommendations = sorted(
             recommendation_scores.items(),
             key=lambda item: (
-                item[1]["score"]
+                item[1]["hybrid_score"]
             ),
             reverse=True
         )
 
-        # BUILD FINAL RESULTS
+        # Final results
 
         results = []
 
@@ -415,13 +548,10 @@ class MovieRecommender:
             movie = movie_rows.iloc[0]
 
             results.append({
-
                 "movieId": int(
                     movie["movieId"]
                 ),
-
                 "title": movie["title"],
-
                 "genres": movie["genres"],
 
                 "similarity_score": round(
@@ -433,10 +563,19 @@ class MovieRecommender:
                     4
                 ),
 
+                "popularity_score": round(
+                    float(
+                        recommendation_data[
+                            "popularity_score"
+                        ]
+                    ),
+                    4
+                ),
+
                 "recommendation_score": round(
                     float(
                         recommendation_data[
-                            "score"
+                            "hybrid_score"
                         ]
                     ),
                     4
@@ -484,19 +623,16 @@ class MovieRecommender:
         )
 
         if model_directory:
+
             os.makedirs(
                 model_directory,
                 exist_ok=True
             )
 
         model_data = {
-
             "movies": self.movies,
-
             "vectorizer": self.vectorizer,
-
             "movie_vectors": self.movie_vectors,
-
             "movie_indices": self.movie_indices
         }
 
@@ -515,103 +651,138 @@ class MovieRecommender:
         )
 
 
-# TEST THE RECOMMENDER
+# TESTING
 
 if __name__ == "__main__":
 
     print(
-        "Loading movie recommendation system..."
+        "\n========================================"
     )
+
+    print(
+        "HYBRID MOVIE RECOMMENDATION SYSTEM"
+    )
+
+    print(
+        "========================================"
+    )
+
+    # Initialize
 
     recommender = MovieRecommender()
 
-    print(
-        f"Loaded "
-        f"{len(recommender.movies)} "
-        f"movies."
-    )
-
-    # CONTENT-BASED TEST
+    # Content-based test
 
     movie = "Toy Story (1995)"
 
     print(
-        f"\nRecommendations for: "
-        f"{movie}\n"
+        f"\nContent-based recommendations "
+        f"for: {movie}"
     )
 
-    recommendations = (
-        recommender.recommend(
-            movie,
-            10
-        )
+    print(
+        "----------------------------------------"
     )
 
-    for item in recommendations:
+    recommendations = recommender.recommend(
+        movie_title=movie,
+        number_of_recommendations=10
+    )
+
+    for index, item in enumerate(
+        recommendations,
+        start=1
+    ):
 
         print(
+            f"{index}. "
             f"{item['title']} "
-            f"| {item['genres']} "
             f"| Similarity: "
             f"{item['similarity_score']}"
         )
 
-    # PERSONALIZED TEST
+    # Load ratings
 
-    ratings_path = (
-        "dataset/ratings.csv"
+    print(
+        "\nLoading ratings dataset..."
     )
 
-    if os.path.exists(
-        ratings_path
-    ):
+    try:
 
         ratings = pd.read_csv(
-            ratings_path
+            "dataset/ratings.csv"
         )
-
-        user_id = 1
 
         print(
-            f"\nPersonalized recommendations "
-            f"for User {user_id}:\n"
+            f"Loaded {len(ratings)} ratings."
         )
 
-        personalized = (
-            recommender.recommend_for_user(
-                user_id=user_id,
-                ratings=ratings,
-                number_of_recommendations=10
-            )
+    except FileNotFoundError:
+
+        print(
+            "ratings.csv not found."
         )
 
-        if personalized:
+        ratings = pd.DataFrame()
 
-            for item in personalized:
+    # Personalized hybrid test
 
-                print(
-                    f"{item['title']} "
-                    f"| {item['genres']} "
-                    f"| Score: "
-                    f"{item['recommendation_score']} "
-                    f"| Based on: "
-                    f"{item['sourceMovieTitle']} "
-                    f"({item['sourceUserRating']}/5)"
-                )
+    user_id = 1
 
-        else:
+    print(
+        f"\nHybrid personalized recommendations "
+        f"for User {user_id}:"
+    )
+
+    print(
+        "----------------------------------------"
+    )
+
+    personalized = (
+        recommender.recommend_for_user(
+            user_id=user_id,
+            ratings=ratings,
+            number_of_recommendations=10
+        )
+    )
+
+    if personalized:
+
+        for index, item in enumerate(
+            personalized,
+            start=1
+        ):
 
             print(
-                "Not enough rating history "
-                "for personalized recommendations."
+                f"{index}. "
+                f"{item['title']} "
+                f"| Similarity: "
+                f"{item['similarity_score']} "
+                f"| Popularity: "
+                f"{item['popularity_score']} "
+                f"| Hybrid Score: "
+                f"{item['recommendation_score']}"
             )
 
     else:
 
         print(
-            "\nratings.csv not found."
+            "Not enough rating history "
+            "for personalized recommendations."
         )
 
-    # SAVE MODEL
+    # Save model
 
     recommender.save_model()
+
+    print(
+        "\n========================================"
+    )
+
+    print(
+        "Hybrid recommendation test completed."
+    )
+
+    print(
+        "========================================"
+    )
