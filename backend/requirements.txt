@@ -4,5 +4,4 @@ python-dotenv
 pymongo
 email-validator
 python-jose[cryptography]
-passlib
 bcrypt

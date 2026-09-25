@@ -3,8 +3,9 @@ import os
 from datetime import datetime, timedelta, timezone
 
 import bcrypt
+
 from dotenv import load_dotenv
-from jose import jwt
+from jose import JWTError, jwt
 
 
 load_dotenv()
@@ -28,41 +29,51 @@ JWT_EXPIRE_MINUTES = int(
 )
 
 
+# ==========================================
 # PASSWORD HASHING
+# ==========================================
 
 def hash_password(password: str) -> str:
 
     password_bytes = password.encode("utf-8")
 
-    salt = bcrypt.gensalt()
+    # bcrypt supports a maximum of 72 bytes
+    if len(password_bytes) > 72:
+        raise ValueError(
+            "Password cannot be longer than 72 bytes."
+        )
 
-    hashed_password = bcrypt.hashpw(
+    hashed = bcrypt.hashpw(
         password_bytes,
-        salt
+        bcrypt.gensalt()
     )
 
-    return hashed_password.decode("utf-8")
+    return hashed.decode("utf-8")
 
+
+# ==========================================
+# PASSWORD VERIFICATION
+# ==========================================
 
 def verify_password(
     plain_password: str,
     hashed_password: str
 ) -> bool:
 
-    plain_password_bytes = plain_password.encode(
-        "utf-8"
-    )
+    password_bytes = plain_password.encode("utf-8")
 
-    hashed_password_bytes = hashed_password.encode(
-        "utf-8"
-    )
+    if len(password_bytes) > 72:
+        return False
 
     return bcrypt.checkpw(
-        plain_password_bytes,
-        hashed_password_bytes
+        password_bytes,
+        hashed_password.encode("utf-8")
     )
 
-# JWT TOKEN
+
+# ==========================================
+# CREATE JWT TOKEN
+# ==========================================
 
 def create_access_token(
     user_id: str
@@ -86,3 +97,31 @@ def create_access_token(
     )
 
     return token
+
+
+# ==========================================
+# DECODE JWT TOKEN
+# ==========================================
+
+def decode_access_token(
+    token: str
+):
+
+    try:
+
+        payload = jwt.decode(
+            token,
+            JWT_SECRET_KEY,
+            algorithms=[JWT_ALGORITHM]
+        )
+
+        user_id = payload.get("sub")
+
+        if not user_id:
+            return None
+
+        return user_id
+
+    except JWTError:
+
+        return None

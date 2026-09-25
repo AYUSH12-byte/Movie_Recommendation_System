@@ -1,6 +1,7 @@
 from fastapi import (
     APIRouter,
-    HTTPException
+    HTTPException,
+    Depends
 )
 
 from app.models.user import (
@@ -11,6 +12,10 @@ from app.models.user import (
 from app.services.auth_service import (
     register_user,
     login_user
+)
+
+from app.api.dependencies import (
+    get_current_user
 )
 
 
@@ -59,3 +64,19 @@ def login(
         )
 
     return result
+
+
+@router.get("/me")
+def get_me(
+    current_user=Depends(get_current_user)
+):
+
+    return {
+        "success": True,
+        "user": {
+            "id": str(current_user["_id"]),
+            "name": current_user["name"],
+            "email": current_user["email"],
+            "createdAt": current_user["createdAt"]
+        }
+    }
