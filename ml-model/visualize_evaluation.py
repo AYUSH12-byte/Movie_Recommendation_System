@@ -4,360 +4,371 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 
-RESULTS_FILE = "evaluation_results.csv"
+# ============================================================
+# CONFIGURATION
+# ============================================================
 
-OUTPUT_DIRECTORY = "evaluation_plots"
+RESULTS_FILE = "evaluation_results_v2.csv"
 
+OUTPUT_DIR = "evaluation_plots_v2"
+
+SUMMARY_FILE = os.path.join(
+    OUTPUT_DIR,
+    "evaluation_summary_v2.csv"
+)
+
+
+# ============================================================
+# LOAD RESULTS
+# ============================================================
 
 def load_results():
 
     if not os.path.exists(RESULTS_FILE):
 
         raise FileNotFoundError(
-            f"Evaluation results not found: {RESULTS_FILE}"
+            f"Evaluation results not found: "
+            f"{RESULTS_FILE}"
         )
 
     results = pd.read_csv(
         RESULTS_FILE
     )
 
-    if results.empty:
+    required_columns = {
+        "model",
+        "k",
+        "precision",
+        "recall",
+        "hit_rate",
+        "f1"
+    }
+
+    missing_columns = (
+        required_columns
+        - set(results.columns)
+    )
+
+    if missing_columns:
 
         raise ValueError(
-            "Evaluation results file is empty."
+            "Missing columns in evaluation results: "
+            f"{missing_columns}"
         )
 
     return results
 
 
+# ============================================================
+# CREATE OUTPUT DIRECTORY
+# ============================================================
+
 def create_output_directory():
 
     os.makedirs(
-        OUTPUT_DIRECTORY,
+        OUTPUT_DIR,
         exist_ok=True
     )
 
 
-def plot_precision(results):
+# ============================================================
+# CREATE SUMMARY
+# ============================================================
 
-    plt.figure(
-        figsize=(10, 6)
-    )
+def create_summary(results):
 
-    plt.plot(
-        results["K"],
-        results["Content-Based Precision@K"],
-        marker="o",
-        label="Content-Based"
-    )
-
-    plt.plot(
-        results["K"],
-        results["Hybrid Precision@K"],
-        marker="o",
-        label="Hybrid"
-    )
-
-    plt.title(
-        "Precision@K Comparison"
-    )
-
-    plt.xlabel(
-        "K"
-    )
-
-    plt.ylabel(
-        "Precision"
-    )
-
-    plt.xticks(
-        results["K"]
-    )
-
-    plt.grid(
-        True,
-        alpha=0.3
-    )
-
-    plt.legend()
-
-    plt.tight_layout()
-
-    output_file = os.path.join(
-        OUTPUT_DIRECTORY,
-        "precision_at_k.png"
-    )
-
-    plt.savefig(
-        output_file,
-        dpi=300,
-        bbox_inches="tight"
-    )
-
-    plt.close()
-
-    print(
-        f"Saved: {output_file}"
-    )
-
-
-def plot_recall(results):
-
-    plt.figure(
-        figsize=(10, 6)
-    )
-
-    plt.plot(
-        results["K"],
-        results["Content-Based Recall@K"],
-        marker="o",
-        label="Content-Based"
-    )
-
-    plt.plot(
-        results["K"],
-        results["Hybrid Recall@K"],
-        marker="o",
-        label="Hybrid"
-    )
-
-    plt.title(
-        "Recall@K Comparison"
-    )
-
-    plt.xlabel(
-        "K"
-    )
-
-    plt.ylabel(
-        "Recall"
-    )
-
-    plt.xticks(
-        results["K"]
-    )
-
-    plt.grid(
-        True,
-        alpha=0.3
-    )
-
-    plt.legend()
-
-    plt.tight_layout()
-
-    output_file = os.path.join(
-        OUTPUT_DIRECTORY,
-        "recall_at_k.png"
-    )
-
-    plt.savefig(
-        output_file,
-        dpi=300,
-        bbox_inches="tight"
-    )
-
-    plt.close()
-
-    print(
-        f"Saved: {output_file}"
-    )
-
-
-def plot_hit_rate(results):
-
-    plt.figure(
-        figsize=(10, 6)
-    )
-
-    plt.plot(
-        results["K"],
-        results["Content-Based Hit Rate@K"],
-        marker="o",
-        label="Content-Based"
-    )
-
-    plt.plot(
-        results["K"],
-        results["Hybrid Hit Rate@K"],
-        marker="o",
-        label="Hybrid"
-    )
-
-    plt.title(
-        "Hit Rate@K Comparison"
-    )
-
-    plt.xlabel(
-        "K"
-    )
-
-    plt.ylabel(
-        "Hit Rate"
-    )
-
-    plt.xticks(
-        results["K"]
-    )
-
-    plt.grid(
-        True,
-        alpha=0.3
-    )
-
-    plt.legend()
-
-    plt.tight_layout()
-
-    output_file = os.path.join(
-        OUTPUT_DIRECTORY,
-        "hit_rate_at_k.png"
-    )
-
-    plt.savefig(
-        output_file,
-        dpi=300,
-        bbox_inches="tight"
-    )
-
-    plt.close()
-
-    print(
-        f"Saved: {output_file}"
-    )
-
-
-def create_summary_table(results):
-
-    summary = results[
-        [
-            "K",
-            "Content-Based Precision@K",
-            "Content-Based Recall@K",
-            "Content-Based Hit Rate@K",
-            "Hybrid Precision@K",
-            "Hybrid Recall@K",
-            "Hybrid Hit Rate@K"
+    summary = (
+        results
+        .groupby(
+            [
+                "model",
+                "k"
+            ]
+        )[
+            [
+                "precision",
+                "recall",
+                "hit_rate",
+                "f1"
+            ]
         ]
-    ].copy()
-
-    summary = summary.round(
-        4
-    )
-
-    output_file = os.path.join(
-        OUTPUT_DIRECTORY,
-        "evaluation_summary.csv"
+        .mean()
+        .reset_index()
     )
 
     summary.to_csv(
-        output_file,
+        SUMMARY_FILE,
         index=False
-    )
-
-    print(
-        f"Saved: {output_file}"
     )
 
     return summary
 
 
-def print_summary(summary):
+# ============================================================
+# GENERIC METRIC PLOT
+# ============================================================
 
-    print(
-        "\n" + "=" * 80
+def plot_metric(
+    summary,
+    metric,
+    title,
+    ylabel,
+    filename
+):
+
+    plt.figure(
+        figsize=(9, 6)
     )
 
-    print(
-        "EVALUATION SUMMARY"
+    for model in summary["model"].unique():
+
+        model_data = (
+            summary[
+                summary["model"] == model
+            ]
+            .sort_values("k")
+        )
+
+        plt.plot(
+            model_data["k"],
+            model_data[metric],
+            marker="o",
+            linewidth=2,
+            label=model
+        )
+
+    plt.xlabel(
+        "Number of Recommendations (K)"
     )
 
-    print(
-        "=" * 80
+    plt.ylabel(
+        ylabel
     )
 
-    print(
-        summary.to_string(
-            index=False
+    plt.title(
+        title
+    )
+
+    plt.xticks(
+        sorted(
+            summary["k"].unique()
         )
     )
 
-    print(
-        "\n" + "=" * 80
+    plt.ylim(
+        0,
+        1
     )
 
+    plt.grid(
+        True,
+        alpha=0.3
+    )
+
+    plt.legend()
+
+    plt.tight_layout()
+
+    output_path = os.path.join(
+        OUTPUT_DIR,
+        filename
+    )
+
+    plt.savefig(
+        output_path,
+        dpi=300,
+        bbox_inches="tight"
+    )
+
+    plt.close()
+
+    print(
+        f"Created: {output_path}"
+    )
+
+
+# ============================================================
+# CREATE ALL PLOTS
+# ============================================================
+
+def create_plots(summary):
+
+    print(
+        "\nGenerating evaluation graphs..."
+    )
+
+    plot_metric(
+        summary,
+        metric="precision",
+        title="Precision@K Comparison",
+        ylabel="Precision",
+        filename="precision_at_k_v2.png"
+    )
+
+    plot_metric(
+        summary,
+        metric="recall",
+        title="Recall@K Comparison",
+        ylabel="Recall",
+        filename="recall_at_k_v2.png"
+    )
+
+    plot_metric(
+        summary,
+        metric="hit_rate",
+        title="Hit Rate@K Comparison",
+        ylabel="Hit Rate",
+        filename="hit_rate_at_k_v2.png"
+    )
+
+    plot_metric(
+        summary,
+        metric="f1",
+        title="F1@K Comparison",
+        ylabel="F1 Score",
+        filename="f1_at_k_v2.png"
+    )
+
+
+# ============================================================
+# PRINT SUMMARY
+# ============================================================
+
+def print_summary(summary):
+
+    print("\n")
+
+    print("=" * 70)
+
+    print(
+        "EVALUATION VISUALIZATION SUMMARY"
+    )
+
+    print("=" * 70)
+
+    for model in summary["model"].unique():
+
+        print(
+            f"\nModel: {model}"
+        )
+
+        model_data = (
+            summary[
+                summary["model"] == model
+            ]
+            .sort_values("k")
+        )
+
+        for _, row in model_data.iterrows():
+
+            k = int(
+                row["k"]
+            )
+
+            print(
+                f"\nK = {k}"
+            )
+
+            print(
+                f"Precision@{k}: "
+                f"{row['precision']:.4f}"
+            )
+
+            print(
+                f"Recall@{k}: "
+                f"{row['recall']:.4f}"
+            )
+
+            print(
+                f"Hit Rate@{k}: "
+                f"{row['hit_rate']:.4f}"
+            )
+
+            print(
+                f"F1@{k}: "
+                f"{row['f1']:.4f}"
+            )
+
+    print(
+        "\n" + "=" * 70
+    )
+
+
+# ============================================================
+# MAIN
+# ============================================================
 
 def main():
 
-    print(
-        "\n" + "=" * 80
-    )
+    print("=" * 70)
 
     print(
         "MOVIE RECOMMENDATION SYSTEM"
     )
 
     print(
-        "EVALUATION VISUALIZATION"
+        "EVALUATION VISUALIZATION V2"
     )
+
+    print("=" * 70)
+
+    # --------------------------------------------------------
+    # Create output directory
+    # --------------------------------------------------------
+
+    create_output_directory()
+
+    # --------------------------------------------------------
+    # Load evaluation results
+    # --------------------------------------------------------
 
     print(
-        "=" * 80
+        "\nLoading evaluation results..."
     )
-
-    # Load results
 
     results = load_results()
 
     print(
-        f"\nLoaded evaluation results: "
-        f"{len(results)} rows"
+        f"Rows loaded: {len(results):,}"
     )
 
-    # Create directory
+    # --------------------------------------------------------
+    # Create summary
+    # --------------------------------------------------------
 
-    create_output_directory()
-
-    # Generate graphs
+    summary = create_summary(
+        results
+    )
 
     print(
-        "\nGenerating evaluation graphs..."
+        f"Summary saved to: "
+        f"{SUMMARY_FILE}"
     )
 
-    plot_precision(
-        results
+    # --------------------------------------------------------
+    # Create charts
+    # --------------------------------------------------------
+
+    create_plots(
+        summary
     )
 
-    plot_recall(
-        results
-    )
-
-    plot_hit_rate(
-        results
-    )
-
-    # Create summary
-
-    summary = create_summary_table(
-        results
-    )
-
+    # --------------------------------------------------------
     # Print summary
+    # --------------------------------------------------------
 
     print_summary(
         summary
     )
 
     print(
-        "\nEvaluation visualization completed."
+        "\nVisualization completed successfully."
     )
 
-    print(
-        f"Graphs saved in: "
-        f"{OUTPUT_DIRECTORY}/"
-    )
 
+# ============================================================
+# ENTRY POINT
+# ============================================================
 
 if __name__ == "__main__":
-
     main()
