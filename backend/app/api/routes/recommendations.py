@@ -15,7 +15,8 @@ from app.database.database import (
 
 from app.services.recommendation_service import (
     get_movie_recommendations,
-    get_personalized_recommendations
+    get_personalized_recommendations,
+    get_cold_start_recommendations
 )
 
 
@@ -37,9 +38,11 @@ def movie_recommendations(
     )
 ):
 
-    recommendations = get_movie_recommendations(
-        movie_title=movie_title,
-        limit=limit
+    recommendations = (
+        get_movie_recommendations(
+            movie_title=movie_title,
+            limit=limit
+        )
     )
 
     if not recommendations:
@@ -79,8 +82,6 @@ def personalized_recommendations(
         current_user["_id"]
     )
 
-    # Get user's ratings
-
     ratings = list(
         ratings_collection.find(
             {
@@ -95,15 +96,31 @@ def personalized_recommendations(
         )
     )
 
-    # Generate recommendations
-
-    result = get_personalized_recommendations(
-        user_id=user_id,
-        ratings=ratings,
-        limit=limit
+    result = (
+        get_personalized_recommendations(
+            user_id=user_id,
+            ratings=ratings,
+            limit=limit
+        )
     )
 
     return result
+
+
+# COLD-START RECOMMENDATIONS
+
+@router.get("/cold-start")
+def cold_start_recommendations(
+    limit: int = Query(
+        10,
+        ge=1,
+        le=50
+    )
+):
+
+    return get_cold_start_recommendations(
+        limit=limit
+    )
 
 
 # RECOMMENDATION EXPLANATION
@@ -122,8 +139,6 @@ def recommendation_explanation(
         current_user["_id"]
     )
 
-    # Get user's ratings
-
     ratings = list(
         ratings_collection.find(
             {
@@ -138,22 +153,14 @@ def recommendation_explanation(
         )
     )
 
-    if not ratings:
+    # Get recommendation list
 
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                "Rate some movies first to "
-                "generate recommendation explanations."
-            )
+    result = (
+        get_personalized_recommendations(
+            user_id=user_id,
+            ratings=ratings,
+            limit=50
         )
-
-    # Generate personalized recommendations
-
-    result = get_personalized_recommendations(
-        user_id=user_id,
-        ratings=ratings,
-        limit=50
     )
 
     recommendations = (
@@ -162,8 +169,6 @@ def recommendation_explanation(
             []
         )
     )
-
-    # Find requested recommendation
 
     recommendation = None
 
@@ -174,7 +179,36 @@ def recommendation_explanation(
         ) == movie_id:
 
             recommendation = item
+
             break
+
+    # If not found in personalized list,
+    # check cold-start recommendations.
+
+    if not recommendation:
+
+        cold_start_result = (
+            get_cold_start_recommendations(
+                limit=50
+            )
+        )
+
+        cold_start_recommendations = (
+            cold_start_result.get(
+                "recommendations",
+                []
+            )
+        )
+
+        for item in cold_start_recommendations:
+
+            if int(
+                item["movieId"]
+            ) == movie_id:
+
+                recommendation = item
+
+                break
 
     if not recommendation:
 
@@ -182,45 +216,107 @@ def recommendation_explanation(
             status_code=404,
             detail=(
                 "This movie is not currently "
-                "in your personalized recommendations."
+                "in the recommendation list."
             )
         )
 
-    # Return explanation
+    # Hybrid explanation
+
+    if (
+        result.get(
+            "recommendationType"
+        )
+        == "hybrid"
+        and
+        recommendation.get(
+            "sourceMovieTitle"
+        )
+    ):
+
+        explanation = (
+
+            f"This movie was recommended "
+            f"because you rated "
+            f"{recommendation['sourceMovieTitle']} "
+            f"{recommendation.get('sourceUserRating')}/5. "
+
+            f"It has a content similarity score "
+            f"of {recommendation.get('similarity_score', 0)} "
+            f"and a popularity score of "
+            f"{recommendation.get('popularity_score', 0)}."
+        )
+
+        recommendation_type = "hybrid"
+
+    # Cold-start explanation
+
+    else:
+
+        explanation = (
+
+            "This movie was recommended as a "
+            "popular choice for users without "
+            "enough rating history for personalized "
+            "recommendations. Its recommendation "
+            "score is based on its average rating "
+            "and the number of audience ratings."
+        )
+
+        recommendation_type = "cold_start"
 
     return {
+
         "success": True,
+
+        "recommendationType": (
+            recommendation_type
+        ),
+
         "movie": {
+
             "movieId": recommendation[
                 "movieId"
             ],
+
             "title": recommendation[
                 "title"
             ],
+
             "genres": recommendation[
                 "genres"
             ]
         },
+
         "explanation": {
-            "reason": recommendation.get(
-                "reason",
-                "Recommended based on your "
-                "movie preferences."
-            ),
+
+            "reason": explanation,
+
             "sourceMovieId": recommendation.get(
                 "sourceMovieId"
             ),
+
             "sourceMovieTitle": recommendation.get(
                 "sourceMovieTitle"
             ),
+
             "yourRating": recommendation.get(
                 "sourceUserRating"
             ),
+
             "similarityScore": recommendation.get(
                 "similarity_score"
             ),
+
+            "popularityScore": recommendation.get(
+                "popularity_score"
+            ),
+
             "recommendationScore": recommendation.get(
                 "recommendation_score"
+            ),
+
+            "coldStartScore": recommendation.get(
+                "coldStartScore"
             )
         }
     }
