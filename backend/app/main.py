@@ -1,11 +1,15 @@
 from fastapi import FastAPI
 
-from app.api.routes.recommendations import (
-    router as recommendation_router
-)
-
 from app.api.routes.auth import (
     router as auth_router
+)
+
+from app.api.routes.movies import (
+    router as movie_router
+)
+
+from app.api.routes.recommendations import (
+    router as recommendation_router
 )
 
 from app.database.database import (
@@ -24,22 +28,25 @@ app = FastAPI(
 )
 
 
-# Create MongoDB indexes
 create_indexes()
 
-
-# API routes
-app.include_router(
-    recommendation_router
-)
 
 app.include_router(
     auth_router
 )
 
+app.include_router(
+    movie_router
+)
+
+app.include_router(
+    recommendation_router
+)
+
 
 @app.get("/")
 def root():
+
     return {
         "message": "Movie Recommendation System API is running"
     }
