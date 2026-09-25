@@ -7,19 +7,22 @@ from app.database.database import (
 
 def create_indexes():
 
-    # User email must be unique
+    # Users
+
     users_collection.create_index(
         "email",
         unique=True
     )
 
-    # Movie ID must be unique
+    # Movies
+
     movies_collection.create_index(
         "movieId",
         unique=True
     )
 
-    # One user can rate one movie only once
+    # Ratings
+
     ratings_collection.create_index(
         [
             ("userId", 1),
@@ -28,4 +31,14 @@ def create_indexes():
         unique=True
     )
 
-    print("MongoDB indexes created successfully.")
+    ratings_collection.create_index(
+        "movieId"
+    )
+
+    ratings_collection.create_index(
+        "createdAt"
+    )
+
+    print(
+        "MongoDB indexes created successfully."
+    )
