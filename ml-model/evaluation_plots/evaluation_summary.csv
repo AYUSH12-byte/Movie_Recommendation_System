@@ -1,0 +1,4 @@
+K,Content-Based Precision@K,Content-Based Recall@K,Content-Based Hit Rate@K,Hybrid Precision@K,Hybrid Recall@K,Hybrid Hit Rate@K
+5,0.002,0.01,0.01,0.002,0.01,0.01
+10,0.002,0.02,0.02,0.001,0.01,0.01
+20,0.001,0.02,0.02,0.0005,0.01,0.01
