@@ -9,34 +9,30 @@ from sklearn.metrics.pairwise import cosine_similarity
 
 class MovieRecommender:
 
-    # INITIALIZATION
+    # INITIALIZE MODEL
 
     def __init__(
         self,
         dataset_path="dataset/movies.csv"
     ):
 
-        print("Loading movie dataset...")
-
         self.movies = pd.read_csv(
             dataset_path
         )
 
-        # Clean missing values
+        # Handle missing values
 
         self.movies["genres"] = (
             self.movies["genres"]
             .fillna("")
-            .astype(str)
         )
 
         self.movies["title"] = (
             self.movies["title"]
             .fillna("")
-            .astype(str)
         )
 
-        # Create content column
+        # Create content field
 
         self.movies["content"] = (
             self.movies["title"]
@@ -56,16 +52,12 @@ class MovieRecommender:
             )
         )
 
-        # Movie title -> DataFrame index
+        # Movie title -> dataframe index
 
         self.movie_indices = pd.Series(
             self.movies.index,
             index=self.movies["title"]
         ).drop_duplicates()
-
-        print(
-            f"Loaded {len(self.movies)} movies."
-        )
 
     # CONTENT-BASED RECOMMENDATION
 
@@ -75,17 +67,11 @@ class MovieRecommender:
         number_of_recommendations=10
     ):
 
-        # Validate recommendation count
-
-        if number_of_recommendations < 1:
-            number_of_recommendations = 10
-
-        # Check movie existence
+        # Check movie exists
 
         if movie_title not in self.movie_indices:
-            return []
 
-        # Get selected movie index
+            return []
 
         movie_index = self.movie_indices[
             movie_title
@@ -98,7 +84,7 @@ class MovieRecommender:
             self.movie_vectors
         ).flatten()
 
-        # Sort movies by similarity
+        # Sort by similarity
 
         similar_indices = (
             similarity_scores
@@ -107,23 +93,31 @@ class MovieRecommender:
 
         recommendations = []
 
-        # Build recommendation list
+        # Build recommendations
 
         for index in similar_indices:
 
-            # Don't recommend the same movie
+            # Skip original movie
 
             if index == movie_index:
                 continue
 
-            movie = self.movies.iloc[index]
-
             recommendations.append({
+
                 "movieId": int(
-                    movie["movieId"]
+                    self.movies.iloc[index][
+                        "movieId"
+                    ]
                 ),
-                "title": movie["title"],
-                "genres": movie["genres"],
+
+                "title": self.movies.iloc[index][
+                    "title"
+                ],
+
+                "genres": self.movies.iloc[index][
+                    "genres"
+                ],
+
                 "similarity_score": round(
                     float(
                         similarity_scores[index]
@@ -150,7 +144,7 @@ class MovieRecommender:
         minimum_rating=4.0
     ):
 
-        # Validate ratings DataFrame
+        # Validate ratings
 
         if ratings is None:
             return []
@@ -169,13 +163,11 @@ class MovieRecommender:
             if column not in ratings.columns:
                 return []
 
-        # Normalize user ID
-        #
-        # MongoDB userId is stored as string.
-        # MovieLens userId is normally integer.
-        # Converting both to string allows both formats.
+        # Copy ratings
 
         ratings = ratings.copy()
+
+        # Normalize data types
 
         ratings["userId"] = (
             ratings["userId"]
@@ -192,7 +184,7 @@ class MovieRecommender:
             errors="coerce"
         )
 
-        # Remove invalid rating records
+        # Remove invalid data
 
         ratings = ratings.dropna(
             subset=[
@@ -202,9 +194,11 @@ class MovieRecommender:
             ]
         )
 
-        # Get ratings for current user
+        # Normalize current user ID
 
         user_id = str(user_id)
+
+        # Get current user's ratings
 
         user_ratings = ratings[
             ratings["userId"] == user_id
@@ -213,35 +207,30 @@ class MovieRecommender:
         if user_ratings.empty:
             return []
 
-        # Get movies liked by the user
-        #
-        # Default:
-        # rating >= 4.0 means the user liked the movie.
+        # Find highly rated movies
 
         liked_ratings = user_ratings[
             user_ratings["rating"]
             >= minimum_rating
-        ]
+        ].sort_values(
+            "rating",
+            ascending=False
+        )
 
         if liked_ratings.empty:
             return []
 
-        # Dictionary used to combine recommendation scores
-        #
-        # Example:
-        #
-        # Movie A similarity from Movie X = 0.8
-        # User rating for Movie X = 5
-        #
-        # Weighted score = 0.8 * 5 = 4.0
+        # Store recommendation scores
 
         recommendation_scores = {}
 
-        # Generate recommendations from every liked movie
+        # PROCESS EACH LIKED MOVIE
 
-        for _, rating_row in liked_ratings.iterrows():
+        for _, rating_row in (
+            liked_ratings.iterrows()
+        ):
 
-            movie_id = int(
+            source_movie_id = int(
                 rating_row["movieId"]
             )
 
@@ -249,32 +238,36 @@ class MovieRecommender:
                 rating_row["rating"]
             )
 
-            # Find movie in MovieLens dataset
+            # Find source movie
 
             movie_rows = self.movies[
                 self.movies["movieId"]
-                == movie_id
+                == source_movie_id
             ]
 
             if movie_rows.empty:
                 continue
 
-            movie_title = (
-                movie_rows.iloc[0]["title"]
+            source_movie = movie_rows.iloc[0]
+
+            source_movie_title = (
+                source_movie["title"]
             )
 
             # Get similar movies
 
-            recommendations = self.recommend(
-                movie_title=movie_title,
+            similar_movies = self.recommend(
+                movie_title=source_movie_title,
                 number_of_recommendations=(
                     number_of_recommendations
                 )
             )
 
-            # Calculate weighted recommendation scores
+            # Process similar movies
 
-            for recommendation in recommendations:
+            for recommendation in (
+                similar_movies
+            ):
 
                 recommended_movie_id = int(
                     recommendation["movieId"]
@@ -286,29 +279,58 @@ class MovieRecommender:
                     ]
                 )
 
+                # Weighted recommendation score
+                #
+                # High user rating
+                #        ×
+                # similarity
+                #        =
+                # recommendation strength
+
                 weighted_score = (
                     similarity_score
                     * user_rating
                 )
 
+                # Create new recommendation
+
                 if (
                     recommended_movie_id
                     not in recommendation_scores
                 ):
+
                     recommendation_scores[
                         recommended_movie_id
                     ] = {
+
                         "score": 0.0,
+
                         "similarity_score": (
                             similarity_score
+                        ),
+
+                        "source_movie_id": (
+                            source_movie_id
+                        ),
+
+                        "source_movie_title": (
+                            source_movie_title
+                        ),
+
+                        "source_user_rating": (
+                            user_rating
                         )
                     }
 
+                # Add score
+
                 recommendation_scores[
                     recommended_movie_id
-                ]["score"] += weighted_score
+                ]["score"] += (
+                    weighted_score
+                )
 
-                # Keep the highest similarity score
+                # Keep strongest source movie
 
                 if (
                     similarity_score
@@ -317,13 +339,32 @@ class MovieRecommender:
                         recommended_movie_id
                     ]["similarity_score"]
                 ):
+
                     recommendation_scores[
                         recommended_movie_id
                     ]["similarity_score"] = (
                         similarity_score
                     )
 
-        # Remove movies already rated by the user
+                    recommendation_scores[
+                        recommended_movie_id
+                    ]["source_movie_id"] = (
+                        source_movie_id
+                    )
+
+                    recommendation_scores[
+                        recommended_movie_id
+                    ]["source_movie_title"] = (
+                        source_movie_title
+                    )
+
+                    recommendation_scores[
+                        recommended_movie_id
+                    ]["source_user_rating"] = (
+                        user_rating
+                    )
+
+        # REMOVE ALREADY RATED MOVIES
 
         rated_movie_ids = set(
             user_ratings[
@@ -334,13 +375,17 @@ class MovieRecommender:
         )
 
         recommendation_scores = {
+
             movie_id: data
+
             for movie_id, data
             in recommendation_scores.items()
-            if movie_id not in rated_movie_ids
+
+            if movie_id
+            not in rated_movie_ids
         }
 
-        # Sort by recommendation score
+        # SORT RECOMMENDATIONS
 
         sorted_recommendations = sorted(
             recommendation_scores.items(),
@@ -350,7 +395,7 @@ class MovieRecommender:
             reverse=True
         )
 
-        # Build final result
+        # BUILD FINAL RESULTS
 
         results = []
 
@@ -370,11 +415,15 @@ class MovieRecommender:
             movie = movie_rows.iloc[0]
 
             results.append({
+
                 "movieId": int(
                     movie["movieId"]
                 ),
+
                 "title": movie["title"],
+
                 "genres": movie["genres"],
+
                 "similarity_score": round(
                     float(
                         recommendation_data[
@@ -383,6 +432,7 @@ class MovieRecommender:
                     ),
                     4
                 ),
+
                 "recommendation_score": round(
                     float(
                         recommendation_data[
@@ -390,6 +440,27 @@ class MovieRecommender:
                         ]
                     ),
                     4
+                ),
+
+                "sourceMovieId": int(
+                    recommendation_data[
+                        "source_movie_id"
+                    ]
+                ),
+
+                "sourceMovieTitle": (
+                    recommendation_data[
+                        "source_movie_title"
+                    ]
+                ),
+
+                "sourceUserRating": round(
+                    float(
+                        recommendation_data[
+                            "source_user_rating"
+                        ]
+                    ),
+                    1
                 )
             })
 
@@ -408,8 +479,6 @@ class MovieRecommender:
         model_path="models/movie_recommender.pkl"
     ):
 
-        # Create model directory
-
         model_directory = os.path.dirname(
             model_path
         )
@@ -420,16 +489,16 @@ class MovieRecommender:
                 exist_ok=True
             )
 
-        # Data to save
-
         model_data = {
+
             "movies": self.movies,
+
             "vectorizer": self.vectorizer,
+
             "movie_vectors": self.movie_vectors,
+
             "movie_indices": self.movie_indices
         }
-
-        # Save using pickle
 
         with open(
             model_path,
@@ -446,125 +515,103 @@ class MovieRecommender:
         )
 
 
-# TESTING
+# TEST THE RECOMMENDER
 
 if __name__ == "__main__":
 
     print(
-        "\nMOVIE RECOMMENDATION SYSTEM"
+        "Loading movie recommendation system..."
     )
-
-    # Initialize recommender
 
     recommender = MovieRecommender()
 
-    # Test content-based recommendation
+    print(
+        f"Loaded "
+        f"{len(recommender.movies)} "
+        f"movies."
+    )
+
+    # CONTENT-BASED TEST
 
     movie = "Toy Story (1995)"
 
     print(
-        f"\nRecommendations for: {movie}"
+        f"\nRecommendations for: "
+        f"{movie}\n"
     )
 
-    recommendations = recommender.recommend(
-        movie_title=movie,
-        number_of_recommendations=10
+    recommendations = (
+        recommender.recommend(
+            movie,
+            10
+        )
     )
 
-    if recommendations:
-
-        for index, item in enumerate(
-            recommendations,
-            start=1
-        ):
-
-            print(
-                f"{index}. "
-                f"{item['title']} "
-                f"| {item['genres']} "
-                f"| Similarity: "
-                f"{item['similarity_score']}"
-            )
-
-    else:
+    for item in recommendations:
 
         print(
-            "No recommendations found."
+            f"{item['title']} "
+            f"| {item['genres']} "
+            f"| Similarity: "
+            f"{item['similarity_score']}"
         )
 
-    # Load MovieLens ratings
+    # PERSONALIZED TEST
 
-    print(
-        "\nLoading ratings dataset..."
+    ratings_path = (
+        "dataset/ratings.csv"
     )
 
-    try:
+    if os.path.exists(
+        ratings_path
+    ):
 
         ratings = pd.read_csv(
-            "dataset/ratings.csv"
+            ratings_path
         )
+
+        user_id = 1
 
         print(
-            f"Loaded {len(ratings)} ratings."
+            f"\nPersonalized recommendations "
+            f"for User {user_id}:\n"
         )
 
-    except FileNotFoundError:
-
-        print(
-            "ratings.csv not found."
+        personalized = (
+            recommender.recommend_for_user(
+                user_id=user_id,
+                ratings=ratings,
+                number_of_recommendations=10
+            )
         )
 
-        ratings = pd.DataFrame()
+        if personalized:
 
-    # Test personalized recommendation
+            for item in personalized:
 
-    user_id = 1
+                print(
+                    f"{item['title']} "
+                    f"| {item['genres']} "
+                    f"| Score: "
+                    f"{item['recommendation_score']} "
+                    f"| Based on: "
+                    f"{item['sourceMovieTitle']} "
+                    f"({item['sourceUserRating']}/5)"
+                )
 
-    print(
-        f"\nPersonalized recommendations "
-        f"for User {user_id}:"
-    )
-
-    personalized = (
-        recommender.recommend_for_user(
-            user_id=user_id,
-            ratings=ratings,
-            number_of_recommendations=10
-        )
-    )
-
-    if personalized:
-
-        for index, item in enumerate(
-            personalized,
-            start=1
-        ):
+        else:
 
             print(
-                f"{index}. "
-                f"{item['title']} "
-                f"| {item['genres']} "
-                f"| Similarity: "
-                f"{item['similarity_score']} "
-                f"| Recommendation Score: "
-                f"{item['recommendation_score']}"
+                "Not enough rating history "
+                "for personalized recommendations."
             )
 
     else:
 
         print(
-            "Not enough rating history "
-            "for personalized recommendations."
+            "\nratings.csv not found."
         )
 
-    # Save trained model
-
-    print(
-        "\nSaving recommendation model..."
-    )
+    # SAVE MODEL
 
     recommender.save_model()
-
-    print(
-        "\nRecommendation system test completed."
-    )

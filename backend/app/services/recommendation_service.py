@@ -20,7 +20,7 @@ if BASE_DIR not in sys.path:
 from recommender import MovieRecommender
 
 
-# DATASET
+# DATASET PATH
 
 DATASET_PATH = os.path.join(
     BASE_DIR,
@@ -36,52 +36,48 @@ recommender = MovieRecommender(
 )
 
 
-# CONTENT-BASED RECOMMENDATION
+# CONTENT-BASED RECOMMENDATIONS
 
 def get_movie_recommendations(
     movie_title: str,
     limit: int = 10
 ):
+
     recommendations = recommender.recommend(
-        movie_title,
-        limit
+        movie_title=movie_title,
+        number_of_recommendations=limit
     )
 
     return recommendations
 
 
-# PERSONALIZED RECOMMENDATION
+# PERSONALIZED RECOMMENDATIONS
 
 def get_personalized_recommendations(
     user_id: str,
     ratings: list,
     limit: int = 10
 ):
-    """
-    Generate personalized movie recommendations
-    based on the user's MongoDB ratings.
-    """
 
-    # Check whether user has ratings
+    # Check user rating history
 
     if not ratings:
+
         return {
             "success": True,
             "hasProfile": False,
             "message": (
-                "Rate some movies to get personalized "
-                "recommendations."
+                "Rate some movies to get "
+                "personalized recommendations."
             ),
             "recommendations": []
         }
 
-    # Convert MongoDB ratings into DataFrame
+    # Convert MongoDB ratings to DataFrame
 
     ratings_df = pd.DataFrame(
         ratings
     )
-
-    # Make sure required columns exist
 
     required_columns = [
         "userId",
@@ -90,38 +86,35 @@ def get_personalized_recommendations(
     ]
 
     for column in required_columns:
+
         if column not in ratings_df.columns:
+
             return {
                 "success": False,
                 "hasProfile": False,
                 "message": (
-                    f"Missing required rating field: {column}"
+                    f"Missing required rating field: "
+                    f"{column}"
                 ),
                 "recommendations": []
             }
 
-    # Ensure correct data types
+    # Normalize data types
 
     ratings_df["userId"] = (
         ratings_df["userId"]
         .astype(str)
     )
 
-    ratings_df["movieId"] = (
-        pd.to_numeric(
-            ratings_df["movieId"],
-            errors="coerce"
-        )
+    ratings_df["movieId"] = pd.to_numeric(
+        ratings_df["movieId"],
+        errors="coerce"
     )
 
-    ratings_df["rating"] = (
-        pd.to_numeric(
-            ratings_df["rating"],
-            errors="coerce"
-        )
+    ratings_df["rating"] = pd.to_numeric(
+        ratings_df["rating"],
+        errors="coerce"
     )
-
-    # Remove invalid records
 
     ratings_df = ratings_df.dropna(
         subset=[
@@ -140,11 +133,46 @@ def get_personalized_recommendations(
         )
     )
 
+    # Add human-readable explanation
+
+    for recommendation in recommendations:
+
+        source_title = recommendation.get(
+            "sourceMovieTitle"
+        )
+
+        source_rating = recommendation.get(
+            "sourceUserRating"
+        )
+
+        similarity = recommendation.get(
+            "similarity_score",
+            0
+        )
+
+        if source_title and source_rating:
+
+            recommendation["reason"] = (
+                f"Recommended because you rated "
+                f"{source_title} "
+                f"{source_rating}/5, and this movie "
+                f"has a content similarity score of "
+                f"{similarity} with it."
+            )
+
+        else:
+
+            recommendation["reason"] = (
+                "Recommended based on similarity "
+                "with movies you rated highly."
+            )
+
     return {
         "success": True,
         "hasProfile": True,
         "message": (
-            "Personalized recommendations generated successfully."
+            "Personalized recommendations "
+            "generated successfully."
         ),
         "recommendations": recommendations
     }
