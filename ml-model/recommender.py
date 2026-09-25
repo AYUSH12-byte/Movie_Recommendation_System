@@ -10,9 +10,7 @@ from sklearn.metrics.pairwise import cosine_similarity
 
 class MovieRecommender:
 
-    # ============================================================
     # INITIALIZATION
-    # ============================================================
 
     def __init__(
         self,
@@ -20,29 +18,29 @@ class MovieRecommender:
         ratings_path="dataset/ratings.csv"
     ):
 
-        print(
-            "\n========================================"
-        )
+        print("\n========================================")
+        print("Initializing Movie Recommendation Engine")
+        print("========================================")
 
-        print(
-            "Initializing Movie Recommendation Engine"
-        )
-
-        print(
-            "========================================"
-        )
-
-        # ========================================================
         # LOAD MOVIES
-        # ========================================================
 
-        self.movies = pd.read_csv(
-            dataset_path
-        )
+        self.movies = pd.read_csv(dataset_path)
 
-        # ========================================================
+        # VALIDATE MOVIE COLUMNS
+
+        required_movie_columns = [
+            "movieId",
+            "title",
+            "genres"
+        ]
+
+        for column in required_movie_columns:
+            if column not in self.movies.columns:
+                raise ValueError(
+                    f"Required movie column missing: {column}"
+                )
+
         # CLEAN MOVIE DATA
-        # ========================================================
 
         self.movies["movieId"] = pd.to_numeric(
             self.movies["movieId"],
@@ -53,12 +51,14 @@ class MovieRecommender:
             self.movies["title"]
             .fillna("")
             .astype(str)
+            .str.strip()
         )
 
         self.movies["genres"] = (
             self.movies["genres"]
             .fillna("")
             .astype(str)
+            .str.strip()
         )
 
         self.movies = self.movies.dropna(
@@ -70,17 +70,23 @@ class MovieRecommender:
             .astype(int)
         )
 
-        # ========================================================
+        # REMOVE EMPTY TITLES
+
+        self.movies = self.movies[
+            self.movies["title"] != ""
+        ].copy()
+
         # RESET INDEX
-        # ========================================================
+        #
+        # Important:
+        # After this, dataframe index and movie_vectors
+        # positions always match.
 
         self.movies = self.movies.reset_index(
             drop=True
         )
 
-        # ========================================================
         # CREATE CONTENT FIELD
-        # ========================================================
 
         self.movies["content"] = (
             self.movies["title"]
@@ -88,9 +94,7 @@ class MovieRecommender:
             + self.movies["genres"]
         )
 
-        # ========================================================
         # TF-IDF VECTORIZER
-        # ========================================================
 
         self.vectorizer = TfidfVectorizer(
             stop_words="english"
@@ -102,41 +106,26 @@ class MovieRecommender:
             )
         )
 
-        # ========================================================
         # MOVIE TITLE INDEX
-        # ========================================================
         #
-        # IMPORTANT:
-        # Use a dictionary instead of a Pandas Series.
+        # Dictionary is used instead of a Pandas Series.
         #
-        # This prevents:
-        #
-        # ValueError:
-        # The truth value of a Series is ambiguous.
-        #
-        # ========================================================
+        # Duplicate movie titles are handled safely by keeping
+        # the first occurrence.
 
         self.movie_indices = {}
 
-        for index, title in (
-            self.movies["title"].items()
-        ):
+        for index, title in self.movies["title"].items():
 
             if title not in self.movie_indices:
 
-                self.movie_indices[
-                    title
-                ] = index
+                self.movie_indices[title] = int(index)
 
-        # ========================================================
         # LOAD RATINGS
-        # ========================================================
 
         self.ratings = pd.DataFrame()
 
-        if os.path.exists(
-            ratings_path
-        ):
+        if os.path.exists(ratings_path):
 
             try:
 
@@ -144,7 +133,22 @@ class MovieRecommender:
                     ratings_path
                 )
 
-                # Convert movie IDs
+                # VALIDATE RATING COLUMNS
+
+                required_rating_columns = [
+                    "movieId",
+                    "rating"
+                ]
+
+                for column in required_rating_columns:
+
+                    if column not in self.ratings.columns:
+
+                        raise ValueError(
+                            f"Required rating column missing: {column}"
+                        )
+
+                # NORMALIZE RATING TYPES
 
                 self.ratings["movieId"] = (
                     pd.to_numeric(
@@ -153,8 +157,6 @@ class MovieRecommender:
                     )
                 )
 
-                # Convert ratings
-
                 self.ratings["rating"] = (
                     pd.to_numeric(
                         self.ratings["rating"],
@@ -162,7 +164,7 @@ class MovieRecommender:
                     )
                 )
 
-                # Remove invalid rows
+                # REMOVE INVALID RATINGS
 
                 self.ratings = (
                     self.ratings.dropna(
@@ -172,8 +174,6 @@ class MovieRecommender:
                         ]
                     )
                 )
-
-                # Convert movie ID to integer
 
                 self.ratings["movieId"] = (
                     self.ratings["movieId"]
@@ -186,36 +186,35 @@ class MovieRecommender:
                     "Warning: unable to load ratings."
                 )
 
-                print(error)
+                print(
+                    f"Error: {error}"
+                )
 
                 self.ratings = pd.DataFrame()
 
-        # ========================================================
         # INITIALIZATION INFORMATION
-        # ========================================================
 
         print(
-            f"Movies loaded: "
-            f"{len(self.movies)}"
+            f"Movies loaded: {len(self.movies)}"
         )
 
         print(
-            f"Ratings loaded: "
-            f"{len(self.ratings)}"
+            f"Ratings loaded: {len(self.ratings)}"
+        )
+
+        print(
+            f"Unique movie titles indexed: "
+            f"{len(self.movie_indices)}"
         )
 
         print(
             "Recommendation engine ready."
         )
 
-    # ============================================================
     # GENRE HELPER
-    # ============================================================
 
     @staticmethod
-    def _get_genres(
-        genres
-    ):
+    def _get_genres(genres):
 
         if not genres:
 
@@ -235,9 +234,7 @@ class MovieRecommender:
             if genre.strip()
         ]
 
-    # ============================================================
     # GET MOVIE BY ID
-    # ============================================================
 
     def get_movie_by_id(
         self,
@@ -258,8 +255,7 @@ class MovieRecommender:
             return None
 
         movie_rows = self.movies[
-            self.movies["movieId"]
-            == movie_id
+            self.movies["movieId"] == movie_id
         ]
 
         if movie_rows.empty:
@@ -278,9 +274,7 @@ class MovieRecommender:
             "genres": movie["genres"]
         }
 
-    # ============================================================
     # GET MOVIE BY TITLE
-    # ============================================================
 
     def get_movie_by_title(
         self,
@@ -299,9 +293,9 @@ class MovieRecommender:
 
             return None
 
-        movie_index = self.movie_indices[
-            movie_title
-        ]
+        movie_index = int(
+            self.movie_indices[movie_title]
+        )
 
         movie = self.movies.iloc[
             movie_index
@@ -317,9 +311,7 @@ class MovieRecommender:
             "genres": movie["genres"]
         }
 
-    # ============================================================
     # CONTENT-BASED RECOMMENDATION
-    # ============================================================
 
     def recommend(
         self,
@@ -327,27 +319,30 @@ class MovieRecommender:
         number_of_recommendations=10
     ):
 
-        # ========================================================
         # VALIDATE LIMIT
-        # ========================================================
 
-        if (
-            number_of_recommendations
-            < 1
+        try:
+
+            number_of_recommendations = int(
+                number_of_recommendations
+            )
+
+        except (
+            ValueError,
+            TypeError
         ):
 
             number_of_recommendations = 10
 
-        if (
-            number_of_recommendations
-            > 100
-        ):
+        if number_of_recommendations < 1:
+
+            number_of_recommendations = 10
+
+        if number_of_recommendations > 100:
 
             number_of_recommendations = 100
 
-        # ========================================================
         # CLEAN TITLE
-        # ========================================================
 
         if not movie_title:
 
@@ -357,57 +352,44 @@ class MovieRecommender:
             movie_title
         ).strip()
 
-        # ========================================================
         # CHECK MOVIE
-        # ========================================================
 
         if movie_title not in self.movie_indices:
 
             return []
 
-        # ========================================================
         # GET MOVIE INDEX
-        # ========================================================
+        #
+        # IMPORTANT:
+        # Convert explicitly to int so movie_index can never
+        # become a Pandas Series.
 
-        movie_index = self.movie_indices[
-            movie_title
-        ]
+        movie_index = int(
+            self.movie_indices[movie_title]
+        )
 
-        # ========================================================
         # COSINE SIMILARITY
-        # ========================================================
 
         similarity_scores = cosine_similarity(
             self.movie_vectors[movie_index],
             self.movie_vectors
         ).flatten()
 
-        # ========================================================
         # SORT SIMILAR MOVIES
-        # ========================================================
 
         similar_indices = (
-            similarity_scores
-            .argsort()[::-1]
+            similarity_scores.argsort()[::-1]
         )
 
         recommendations = []
 
-        # ========================================================
         # CREATE RECOMMENDATIONS
-        # ========================================================
 
         for index in similar_indices:
 
-            # Convert NumPy integer to Python integer
+            index = int(index)
 
-            index = int(
-                index
-            )
-
-            # ----------------------------------------------------
             # SKIP ORIGINAL MOVIE
-            # ----------------------------------------------------
 
             if index == movie_index:
 
@@ -435,9 +417,7 @@ class MovieRecommender:
                 )
             })
 
-            # ----------------------------------------------------
             # STOP WHEN ENOUGH MOVIES FOUND
-            # ----------------------------------------------------
 
             if (
                 len(recommendations)
@@ -448,9 +428,7 @@ class MovieRecommender:
 
         return recommendations
 
-    # ============================================================
     # POPULARITY SCORE
-    # ============================================================
 
     def calculate_popularity_scores(
         self,
@@ -459,8 +437,7 @@ class MovieRecommender:
 
         if (
             ratings is None
-            or
-            ratings.empty
+            or ratings.empty
         ):
 
             return {}
@@ -478,9 +455,7 @@ class MovieRecommender:
 
         data = ratings.copy()
 
-        # ========================================================
         # NORMALIZE TYPES
-        # ========================================================
 
         data["movieId"] = pd.to_numeric(
             data["movieId"],
@@ -503,9 +478,12 @@ class MovieRecommender:
 
             return {}
 
-        # ========================================================
+        data["movieId"] = (
+            data["movieId"]
+            .astype(int)
+        )
+
         # MOVIE STATISTICS
-        # ========================================================
 
         statistics = (
             data
@@ -524,11 +502,9 @@ class MovieRecommender:
             .reset_index()
         )
 
-        # ========================================================
         # POPULARITY FORMULA
         #
         # Average Rating × log(Rating Count + 1)
-        # ========================================================
 
         statistics[
             "popularity_score"
@@ -547,15 +523,16 @@ class MovieRecommender:
             )
         )
 
-        # ========================================================
         # NORMALIZE POPULARITY
-        # ========================================================
 
         max_score = statistics[
             "popularity_score"
         ].max()
 
-        if max_score > 0:
+        if (
+            pd.notna(max_score)
+            and max_score > 0
+        ):
 
             statistics[
                 "popularity_normalized"
@@ -576,9 +553,7 @@ class MovieRecommender:
                 "popularity_normalized"
             ] = 0.0
 
-        # ========================================================
         # RETURN DICTIONARY
-        # ========================================================
 
         return dict(
             zip(
@@ -588,13 +563,11 @@ class MovieRecommender:
 
                 statistics[
                     "popularity_normalized"
-                ]
+                ].astype(float)
             )
         )
 
-    # ============================================================
     # DIVERSITY-AWARE RERANKING
-    # ============================================================
 
     def diversify_recommendations(
         self,
@@ -607,6 +580,23 @@ class MovieRecommender:
 
             return []
 
+        try:
+
+            number_of_recommendations = int(
+                number_of_recommendations
+            )
+
+        except (
+            ValueError,
+            TypeError
+        ):
+
+            number_of_recommendations = 10
+
+        if number_of_recommendations < 1:
+
+            number_of_recommendations = 10
+
         if (
             len(recommendations)
             <= number_of_recommendations
@@ -618,17 +608,17 @@ class MovieRecommender:
             recommendations.copy()
         )
 
-        # ========================================================
         # SORT BY HYBRID SCORE
-        # ========================================================
 
         candidates.sort(
             key=lambda item:
-                item.get(
-                    "hybrid_score",
+                float(
                     item.get(
-                        "recommendation_score",
-                        0
+                        "hybrid_score",
+                        item.get(
+                            "recommendation_score",
+                            0
+                        )
                     )
                 ),
             reverse=True
@@ -636,9 +626,7 @@ class MovieRecommender:
 
         selected = []
 
-        # ========================================================
         # FIRST MOVIE
-        # ========================================================
 
         first_movie = candidates.pop(
             0
@@ -650,7 +638,10 @@ class MovieRecommender:
             float(
                 first_movie.get(
                     "hybrid_score",
-                    0
+                    first_movie.get(
+                        "recommendation_score",
+                        0
+                    )
                 )
             ),
             4
@@ -660,9 +651,7 @@ class MovieRecommender:
             first_movie
         )
 
-        # ========================================================
         # SELECT REMAINING MOVIES
-        # ========================================================
 
         while (
             candidates
@@ -700,9 +689,7 @@ class MovieRecommender:
 
                 maximum_overlap = 0.0
 
-                # ------------------------------------------------
                 # COMPARE WITH SELECTED MOVIES
-                # ------------------------------------------------
 
                 for selected_movie in selected:
 
@@ -740,13 +727,9 @@ class MovieRecommender:
                         if union:
 
                             overlap = (
-                                len(
-                                    intersection
-                                )
+                                len(intersection)
                                 /
-                                len(
-                                    union
-                                )
+                                len(union)
                             )
 
                         else:
@@ -758,9 +741,7 @@ class MovieRecommender:
                         overlap
                     )
 
-                # ------------------------------------------------
                 # APPLY DIVERSITY PENALTY
-                # ------------------------------------------------
 
                 diversity_score = (
                     base_score
@@ -769,7 +750,9 @@ class MovieRecommender:
                         1
                         -
                         (
-                            diversity_weight
+                            float(
+                                diversity_weight
+                            )
                             *
                             maximum_overlap
                         )
@@ -810,9 +793,7 @@ class MovieRecommender:
 
         return selected
 
-    # ============================================================
     # PERSONALIZED HYBRID RECOMMENDATION
-    # ============================================================
 
     def recommend_for_user(
         self,
@@ -824,8 +805,7 @@ class MovieRecommender:
 
         if (
             ratings is None
-            or
-            ratings.empty
+            or ratings.empty
         ):
 
             return []
@@ -844,9 +824,7 @@ class MovieRecommender:
 
         data = ratings.copy()
 
-        # ========================================================
         # NORMALIZE TYPES
-        # ========================================================
 
         data["userId"] = (
             data["userId"]
@@ -871,13 +849,39 @@ class MovieRecommender:
             ]
         )
 
+        data["movieId"] = (
+            data["movieId"]
+            .astype(int)
+        )
+
         user_id = str(
             user_id
         )
 
-        # ========================================================
+        # VALIDATE NUMBER OF RECOMMENDATIONS
+
+        try:
+
+            number_of_recommendations = int(
+                number_of_recommendations
+            )
+
+        except (
+            ValueError,
+            TypeError
+        ):
+
+            number_of_recommendations = 10
+
+        if number_of_recommendations < 1:
+
+            number_of_recommendations = 10
+
+        if number_of_recommendations > 100:
+
+            number_of_recommendations = 100
+
         # CURRENT USER RATINGS
-        # ========================================================
 
         user_ratings = data[
             data["userId"] == user_id
@@ -887,9 +891,7 @@ class MovieRecommender:
 
             return []
 
-        # ========================================================
         # MOVIES USER LIKED
-        # ========================================================
 
         liked_ratings = (
             user_ratings[
@@ -906,9 +908,7 @@ class MovieRecommender:
 
             return []
 
-        # ========================================================
         # POPULARITY
-        # ========================================================
 
         popularity_scores = (
             self.calculate_popularity_scores(
@@ -918,9 +918,7 @@ class MovieRecommender:
 
         recommendation_scores = {}
 
-        # ========================================================
         # GENERATE CANDIDATES
-        # ========================================================
 
         for _, rating_row in (
             liked_ratings.iterrows()
@@ -968,23 +966,28 @@ class MovieRecommender:
                     ]
                 )
 
+                # NEVER RECOMMEND THE SOURCE MOVIE
+
+                if (
+                    recommended_movie_id
+                    == source_movie_id
+                ):
+
+                    continue
+
                 similarity_score = float(
                     recommendation[
                         "similarity_score"
                     ]
                 )
 
-                # =================================================
                 # USER PREFERENCE SCORE
-                # =================================================
 
                 preference_score = (
                     user_rating / 5.0
                 )
 
-                # =================================================
                 # POPULARITY SCORE
-                # =================================================
 
                 popularity_score = float(
                     popularity_scores.get(
@@ -993,13 +996,11 @@ class MovieRecommender:
                     )
                 )
 
-                # =================================================
                 # HYBRID SCORE
                 #
                 # Content Similarity = 60%
                 # User Preference    = 25%
                 # Popularity         = 15%
-                # =================================================
 
                 hybrid_score = (
                     similarity_score
@@ -1012,9 +1013,7 @@ class MovieRecommender:
                     * 0.15
                 )
 
-                # =================================================
                 # CREATE NEW CANDIDATE
-                # =================================================
 
                 if (
                     recommended_movie_id
@@ -1044,9 +1043,7 @@ class MovieRecommender:
                             user_rating
                     }
 
-                # =================================================
                 # ACCUMULATE SCORE
-                # =================================================
 
                 recommendation_scores[
                     recommended_movie_id
@@ -1054,9 +1051,7 @@ class MovieRecommender:
                     hybrid_score
                 )
 
-                # =================================================
                 # KEEP STRONGEST SOURCE MOVIE
-                # =================================================
 
                 if (
                     similarity_score
@@ -1070,6 +1065,12 @@ class MovieRecommender:
                         recommended_movie_id
                     ]["similarity_score"] = (
                         similarity_score
+                    )
+
+                    recommendation_scores[
+                        recommended_movie_id
+                    ]["popularity_score"] = (
+                        popularity_score
                     )
 
                     recommendation_scores[
@@ -1090,9 +1091,7 @@ class MovieRecommender:
                         user_rating
                     )
 
-        # ========================================================
         # REMOVE MOVIES ALREADY RATED
-        # ========================================================
 
         rated_movie_ids = set(
             user_ratings[
@@ -1103,20 +1102,20 @@ class MovieRecommender:
         )
 
         recommendation_scores = {
-            movie_id: data
-            for movie_id, data
+            movie_id: recommendation_data
+            for (
+                movie_id,
+                recommendation_data
+            )
             in recommendation_scores.items()
-            if movie_id
-            not in rated_movie_ids
+            if movie_id not in rated_movie_ids
         }
 
         if not recommendation_scores:
 
             return []
 
-        # ========================================================
         # CREATE CANDIDATE LIST
-        # ========================================================
 
         candidates = []
 
@@ -1204,9 +1203,11 @@ class MovieRecommender:
                     )
             })
 
-        # ========================================================
+        if not candidates:
+
+            return []
+
         # DIVERSITY-AWARE RERANKING
-        # ========================================================
 
         recommendations = (
             self.diversify_recommendations(
@@ -1218,9 +1219,7 @@ class MovieRecommender:
             )
         )
 
-        # ========================================================
         # REMOVE INTERNAL FIELD
-        # ========================================================
 
         for item in recommendations:
 
@@ -1231,9 +1230,7 @@ class MovieRecommender:
 
         return recommendations
 
-    # ============================================================
     # COLD-START RECOMMENDATIONS
-    # ============================================================
 
     def get_cold_start_recommendations(
         self,
@@ -1241,17 +1238,36 @@ class MovieRecommender:
         minimum_ratings=10
     ):
 
-        # ========================================================
         # CHECK RATINGS
-        # ========================================================
 
         if self.ratings.empty:
 
             return []
 
-        # ========================================================
+        # VALIDATE LIMIT
+
+        try:
+
+            number_of_recommendations = int(
+                number_of_recommendations
+            )
+
+        except (
+            ValueError,
+            TypeError
+        ):
+
+            number_of_recommendations = 10
+
+        if number_of_recommendations < 1:
+
+            number_of_recommendations = 10
+
+        if number_of_recommendations > 100:
+
+            number_of_recommendations = 100
+
         # CALCULATE MOVIE STATISTICS
-        # ========================================================
 
         statistics = (
             self.ratings
@@ -1270,9 +1286,7 @@ class MovieRecommender:
             .reset_index()
         )
 
-        # ========================================================
         # MINIMUM RATING THRESHOLD
-        # ========================================================
 
         statistics = statistics[
             statistics[
@@ -1285,11 +1299,9 @@ class MovieRecommender:
 
             return []
 
-        # ========================================================
         # COLD-START SCORE
         #
         # Average Rating × log(Rating Count + 1)
-        # ========================================================
 
         statistics[
             "coldStartScore"
@@ -1305,9 +1317,7 @@ class MovieRecommender:
             )
         )
 
-        # ========================================================
         # SORT CANDIDATES
-        # ========================================================
 
         statistics = (
             statistics
@@ -1322,9 +1332,7 @@ class MovieRecommender:
 
         candidates = []
 
-        # ========================================================
         # CREATE CANDIDATES
-        # ========================================================
 
         for _, row in (
             statistics.iterrows()
@@ -1391,9 +1399,7 @@ class MovieRecommender:
                     )
             })
 
-        # ========================================================
         # DIVERSITY
-        # ========================================================
 
         return self.diversify_cold_start(
             recommendations=candidates,
@@ -1402,9 +1408,7 @@ class MovieRecommender:
             )
         )
 
-    # ============================================================
     # COLD-START DIVERSITY
-    # ============================================================
 
     def diversify_cold_start(
         self,
@@ -1429,7 +1433,9 @@ class MovieRecommender:
 
         candidates.sort(
             key=lambda item:
-                item["coldStartScore"],
+                float(
+                    item["coldStartScore"]
+                ),
             reverse=True
         )
 
@@ -1437,9 +1443,7 @@ class MovieRecommender:
             candidates.pop(0)
         ]
 
-        # ========================================================
         # SELECT DIVERSE MOVIES
-        # ========================================================
 
         while (
             candidates
@@ -1517,9 +1521,7 @@ class MovieRecommender:
                         overlap
                     )
 
-                # =================================================
                 # DIVERSITY PENALTY
-                # =================================================
 
                 diversity_score = (
                     candidate[
@@ -1573,9 +1575,7 @@ class MovieRecommender:
 
         return selected
 
-    # ============================================================
     # SAVE MODEL
-    # ============================================================
 
     def save_model(
         self,
@@ -1622,10 +1622,56 @@ class MovieRecommender:
             f"\nModel saved to: {model_path}"
         )
 
+    # LOAD SAVED MODEL
 
-# ============================================================
+    @staticmethod
+    def load_model(
+        model_path="models/movie_recommender.pkl"
+    ):
+
+        if not os.path.exists(
+            model_path
+        ):
+
+            raise FileNotFoundError(
+                f"Model file not found: {model_path}"
+            )
+
+        with open(
+            model_path,
+            "rb"
+        ) as file:
+
+            model_data = pickle.load(
+                file
+            )
+
+        recommender = MovieRecommender.__new__(
+            MovieRecommender
+        )
+
+        recommender.movies = (
+            model_data["movies"]
+        )
+
+        recommender.vectorizer = (
+            model_data["vectorizer"]
+        )
+
+        recommender.movie_vectors = (
+            model_data["movie_vectors"]
+        )
+
+        recommender.movie_indices = (
+            model_data["movie_indices"]
+        )
+
+        recommender.ratings = pd.DataFrame()
+
+        return recommender
+
+
 # TESTING
-# ============================================================
 
 if __name__ == "__main__":
 
@@ -1641,15 +1687,11 @@ if __name__ == "__main__":
         "========================================"
     )
 
-    # ========================================================
     # INITIALIZE
-    # ========================================================
 
     recommender = MovieRecommender()
 
-    # ========================================================
     # TEST 1: CONTENT-BASED
-    # ========================================================
 
     movie_title = "Toy Story (1995)"
 
@@ -1665,28 +1707,36 @@ if __name__ == "__main__":
         "----------------------------------------"
     )
 
-    content_results = recommender.recommend(
-        movie_title=movie_title,
-        number_of_recommendations=10
+    content_results = (
+        recommender.recommend(
+            movie_title=movie_title,
+            number_of_recommendations=10
+        )
     )
 
-    for index, item in enumerate(
-        content_results,
-        start=1
-    ):
+    if content_results:
+
+        for index, item in enumerate(
+            content_results,
+            start=1
+        ):
+
+            print(
+                f"{index}. "
+                f"{item['title']} "
+                f"| Similarity: "
+                f"{item['similarity_score']} "
+                f"| Genres: "
+                f"{item['genres']}"
+            )
+
+    else:
 
         print(
-            f"{index}. "
-            f"{item['title']} "
-            f"| Similarity: "
-            f"{item['similarity_score']} "
-            f"| Genres: "
-            f"{item['genres']}"
+            "No content-based recommendations."
         )
 
-    # ========================================================
     # TEST 2: PERSONALIZED HYBRID
-    # ========================================================
 
     print(
         "\n2. PERSONALIZED HYBRID RECOMMENDATIONS"
@@ -1742,9 +1792,7 @@ if __name__ == "__main__":
             "Ratings dataset unavailable."
         )
 
-    # ========================================================
     # TEST 3: COLD START
-    # ========================================================
 
     print(
         "\n3. COLD-START RECOMMENDATIONS"
@@ -1784,9 +1832,7 @@ if __name__ == "__main__":
             "No cold-start recommendations."
         )
 
-    # ========================================================
     # TEST 4: SAVE MODEL
-    # ========================================================
 
     print(
         "\n4. SAVING MODEL"
