@@ -18,7 +18,19 @@ class MovieRecommender:
         ratings_path="dataset/ratings.csv"
     ):
 
-        print("Loading movie dataset...")
+        print(
+            "\n========================================"
+        )
+
+        print(
+            "Initializing Movie Recommendation Engine"
+        )
+
+        print(
+            "========================================"
+        )
+
+        # Load movies
 
         self.movies = pd.read_csv(
             dataset_path
@@ -26,10 +38,9 @@ class MovieRecommender:
 
         # Clean movie data
 
-        self.movies["genres"] = (
-            self.movies["genres"]
-            .fillna("")
-            .astype(str)
+        self.movies["movieId"] = pd.to_numeric(
+            self.movies["movieId"],
+            errors="coerce"
         )
 
         self.movies["title"] = (
@@ -38,7 +49,22 @@ class MovieRecommender:
             .astype(str)
         )
 
-        # Create content features
+        self.movies["genres"] = (
+            self.movies["genres"]
+            .fillna("")
+            .astype(str)
+        )
+
+        self.movies = self.movies.dropna(
+            subset=["movieId"]
+        )
+
+        self.movies["movieId"] = (
+            self.movies["movieId"]
+            .astype(int)
+        )
+
+        # Create content field
 
         self.movies["content"] = (
             self.movies["title"]
@@ -46,7 +72,7 @@ class MovieRecommender:
             + self.movies["genres"]
         )
 
-        # TF-IDF
+        # TF-IDF Vectorizer
 
         self.vectorizer = TfidfVectorizer(
             stop_words="english"
@@ -58,18 +84,20 @@ class MovieRecommender:
             )
         )
 
-        # Movie index
+        # Movie title index
 
         self.movie_indices = pd.Series(
             self.movies.index,
             index=self.movies["title"]
         ).drop_duplicates()
 
-        # Load MovieLens ratings for cold-start
+        # Load ratings
 
         self.ratings = pd.DataFrame()
 
-        if os.path.exists(ratings_path):
+        if os.path.exists(
+            ratings_path
+        ):
 
             try:
 
@@ -77,385 +105,55 @@ class MovieRecommender:
                     ratings_path
                 )
 
-                print(
-                    f"Loaded {len(self.ratings)} "
-                    f"ratings for popularity analysis."
+                self.ratings["movieId"] = (
+                    pd.to_numeric(
+                        self.ratings["movieId"],
+                        errors="coerce"
+                    )
+                )
+
+                self.ratings["rating"] = (
+                    pd.to_numeric(
+                        self.ratings["rating"],
+                        errors="coerce"
+                    )
+                )
+
+                self.ratings = (
+                    self.ratings.dropna(
+                        subset=[
+                            "movieId",
+                            "rating"
+                        ]
+                    )
+                )
+
+                self.ratings["movieId"] = (
+                    self.ratings["movieId"]
+                    .astype(int)
                 )
 
             except Exception as error:
 
                 print(
-                    "Could not load ratings dataset:"
+                    "Warning: unable to load ratings."
                 )
 
                 print(error)
 
+                self.ratings = pd.DataFrame()
+
         print(
-            f"Loaded {len(self.movies)} movies."
+            f"Movies loaded: {len(self.movies)}"
         )
 
-    # CONTENT-BASED RECOMMENDATION
-
-    def recommend(
-        self,
-        movie_title,
-        number_of_recommendations=10
-    ):
-
-        if number_of_recommendations < 1:
-
-            number_of_recommendations = 10
-
-        # Check movie
-
-        if movie_title not in self.movie_indices:
-
-            return []
-
-        movie_index = self.movie_indices[
-            movie_title
-        ]
-
-        # Cosine similarity
-
-        similarity_scores = cosine_similarity(
-            self.movie_vectors[movie_index],
-            self.movie_vectors
-        ).flatten()
-
-        # Sort
-
-        similar_indices = (
-            similarity_scores
-            .argsort()[::-1]
+        print(
+            f"Ratings loaded: {len(self.ratings)}"
         )
 
-        recommendations = []
-
-        for index in similar_indices:
-
-            if index == movie_index:
-
-                continue
-
-            movie = self.movies.iloc[index]
-
-            recommendations.append({
-
-                "movieId": int(
-                    movie["movieId"]
-                ),
-
-                "title": movie["title"],
-
-                "genres": movie["genres"],
-
-                "similarity_score": round(
-                    float(
-                        similarity_scores[index]
-                    ),
-                    4
-                )
-
-            })
-
-            if (
-                len(recommendations)
-                >= number_of_recommendations
-            ):
-
-                break
-
-        return recommendations
-
-    # CALCULATE MOVIE POPULARITY
-
-    def calculate_popularity_scores(
-        self,
-        ratings
-    ):
-
-        if ratings is None or ratings.empty:
-
-            return {}
-
-        required_columns = [
-            "movieId",
-            "rating"
-        ]
-
-        for column in required_columns:
-
-            if column not in ratings.columns:
-
-                return {}
-
-        ratings = ratings.copy()
-
-        ratings["movieId"] = pd.to_numeric(
-            ratings["movieId"],
-            errors="coerce"
+        print(
+            "Recommendation engine ready."
         )
-
-        ratings["rating"] = pd.to_numeric(
-            ratings["rating"],
-            errors="coerce"
-        )
-
-        ratings = ratings.dropna(
-            subset=[
-                "movieId",
-                "rating"
-            ]
-        )
-
-        if ratings.empty:
-
-            return {}
-
-        # Calculate average rating and rating count
-
-        movie_statistics = (
-            ratings
-            .groupby("movieId")
-            .agg(
-                average_rating=(
-                    "rating",
-                    "mean"
-                ),
-                rating_count=(
-                    "rating",
-                    "count"
-                )
-            )
-            .reset_index()
-        )
-
-        # Popularity formula
-        #
-        # average rating × log(rating count + 1)
-
-        movie_statistics[
-            "popularity_score"
-        ] = (
-
-            movie_statistics[
-                "average_rating"
-            ]
-
-            *
-
-            np.log1p(
-                movie_statistics[
-                    "rating_count"
-                ]
-            )
-        )
-
-        # Normalize popularity to 0-1
-
-        max_score = (
-            movie_statistics[
-                "popularity_score"
-            ].max()
-        )
-
-        if max_score > 0:
-
-            movie_statistics[
-                "popularity_normalized"
-            ] = (
-
-                movie_statistics[
-                    "popularity_score"
-                ]
-
-                /
-
-                max_score
-            )
-
-        else:
-
-            movie_statistics[
-                "popularity_normalized"
-            ] = 0.0
-
-        return dict(
-            zip(
-
-                movie_statistics[
-                    "movieId"
-                ].astype(int),
-
-                movie_statistics[
-                    "popularity_normalized"
-                ]
-            )
-        )
-
-    # DIVERSITY-AWARE RERANKING
-
-    def diversify_recommendations(
-        self,
-        recommendations,
-        number_of_recommendations=10,
-        diversity_weight=0.25
-    ):
-
-        if not recommendations:
-
-            return []
-
-        if len(recommendations) <= number_of_recommendations:
-
-            return recommendations
-
-        candidates = recommendations.copy()
-
-        selected = []
-
-        # Select first movie using highest recommendation score
-
-        candidates.sort(
-            key=lambda item: (
-                item.get(
-                    "hybrid_score",
-                    item.get(
-                        "recommendation_score",
-                        0
-                    )
-                )
-            ),
-            reverse=True
-        )
-
-        first_movie = candidates.pop(0)
-
-        selected.append(
-            first_movie
-        )
-
-        # Select remaining movies
-
-        while (
-            candidates
-            and
-            len(selected)
-            < number_of_recommendations
-        ):
-
-            best_candidate = None
-            best_score = float("-inf")
-
-            for candidate in candidates:
-
-                base_score = float(
-                    candidate.get(
-                        "hybrid_score",
-                        candidate.get(
-                            "recommendation_score",
-                            0
-                        )
-                    )
-                )
-
-                candidate_genres = set(
-                    self._get_genres(
-                        candidate.get(
-                            "genres",
-                            ""
-                        )
-                    )
-                )
-
-                # Calculate maximum genre overlap
-
-                maximum_overlap = 0.0
-
-                for selected_movie in selected:
-
-                    selected_genres = set(
-                        self._get_genres(
-                            selected_movie.get(
-                                "genres",
-                                ""
-                            )
-                        )
-                    )
-
-                    if not candidate_genres:
-
-                        overlap = 0.0
-
-                    elif not selected_genres:
-
-                        overlap = 0.0
-
-                    else:
-
-                        intersection = (
-                            candidate_genres
-                            & selected_genres
-                        )
-
-                        union = (
-                            candidate_genres
-                            | selected_genres
-                        )
-
-                        overlap = (
-                            len(intersection)
-                            /
-                            len(union)
-                        )
-
-                    maximum_overlap = max(
-                        maximum_overlap,
-                        overlap
-                    )
-
-                # Diversity penalty
-
-                diversity_score = (
-                    base_score
-                    *
-                    (
-                        1
-                        -
-                        (
-                            diversity_weight
-                            *
-                            maximum_overlap
-                        )
-                    )
-                )
-
-                if diversity_score > best_score:
-
-                    best_score = diversity_score
-                    best_candidate = candidate
-
-            if best_candidate is None:
-
-                break
-
-            best_candidate[
-                "diversity_score"
-            ] = round(
-                float(best_score),
-                4
-            )
-
-            selected.append(
-                best_candidate
-            )
-
-            candidates.remove(
-                best_candidate
-            )
-
-        return selected
 
     # GENRE HELPER
 
@@ -480,6 +178,492 @@ class MovieRecommender:
             if genre.strip()
         ]
 
+    # GET MOVIE BY ID
+
+    def get_movie_by_id(
+        self,
+        movie_id
+    ):
+
+        try:
+
+            movie_id = int(
+                movie_id
+            )
+
+        except (
+            ValueError,
+            TypeError
+        ):
+
+            return None
+
+        movie_rows = self.movies[
+            self.movies["movieId"]
+            == movie_id
+        ]
+
+        if movie_rows.empty:
+
+            return None
+
+        movie = movie_rows.iloc[0]
+
+        return {
+            "movieId": int(
+                movie["movieId"]
+            ),
+
+            "title": movie["title"],
+
+            "genres": movie["genres"]
+        }
+
+    # GET MOVIE BY TITLE
+
+    def get_movie_by_title(
+        self,
+        movie_title
+    ):
+
+        if movie_title not in self.movie_indices:
+
+            return None
+
+        movie_index = self.movie_indices[
+            movie_title
+        ]
+
+        movie = self.movies.iloc[
+            movie_index
+        ]
+
+        return {
+            "movieId": int(
+                movie["movieId"]
+            ),
+
+            "title": movie["title"],
+
+            "genres": movie["genres"]
+        }
+
+    # CONTENT-BASED RECOMMENDATION
+
+    def recommend(
+        self,
+        movie_title,
+        number_of_recommendations=10
+    ):
+
+        if (
+            number_of_recommendations
+            < 1
+        ):
+
+            number_of_recommendations = 10
+
+        if (
+            number_of_recommendations
+            > 100
+        ):
+
+            number_of_recommendations = 100
+
+        # Check movie
+
+        if movie_title not in self.movie_indices:
+
+            return []
+
+        movie_index = self.movie_indices[
+            movie_title
+        ]
+
+        # Calculate cosine similarity
+
+        similarity_scores = cosine_similarity(
+            self.movie_vectors[movie_index],
+            self.movie_vectors
+        ).flatten()
+
+        # Sort similarity scores
+
+        similar_indices = (
+            similarity_scores
+            .argsort()[::-1]
+        )
+
+        recommendations = []
+
+        for index in similar_indices:
+
+            # Skip the original movie
+
+            if index == movie_index:
+
+                continue
+
+            movie = self.movies.iloc[
+                index
+            ]
+
+            recommendations.append({
+
+                "movieId": int(
+                    movie["movieId"]
+                ),
+
+                "title": movie["title"],
+
+                "genres": movie["genres"],
+
+                "similarity_score": round(
+                    float(
+                        similarity_scores[index]
+                    ),
+                    4
+                )
+            })
+
+            if (
+                len(recommendations)
+                >= number_of_recommendations
+            ):
+
+                break
+
+        return recommendations
+
+    # POPULARITY SCORE
+
+    def calculate_popularity_scores(
+        self,
+        ratings
+    ):
+
+        if (
+            ratings is None
+            or
+            ratings.empty
+        ):
+
+            return {}
+
+        required_columns = [
+            "movieId",
+            "rating"
+        ]
+
+        for column in required_columns:
+
+            if column not in ratings.columns:
+
+                return {}
+
+        data = ratings.copy()
+
+        data["movieId"] = pd.to_numeric(
+            data["movieId"],
+            errors="coerce"
+        )
+
+        data["rating"] = pd.to_numeric(
+            data["rating"],
+            errors="coerce"
+        )
+
+        data = data.dropna(
+            subset=[
+                "movieId",
+                "rating"
+            ]
+        )
+
+        if data.empty:
+
+            return {}
+
+        # Movie statistics
+
+        statistics = (
+            data
+            .groupby("movieId")
+            .agg(
+                average_rating=(
+                    "rating",
+                    "mean"
+                ),
+
+                rating_count=(
+                    "rating",
+                    "count"
+                )
+            )
+            .reset_index()
+        )
+
+        # Popularity formula
+        # Average Rating × log(Rating Count + 1)
+
+        statistics[
+            "popularity_score"
+        ] = (
+
+            statistics[
+                "average_rating"
+            ]
+
+            *
+
+            np.log1p(
+                statistics[
+                    "rating_count"
+                ]
+            )
+        )
+
+        max_score = statistics[
+            "popularity_score"
+        ].max()
+
+        if max_score > 0:
+
+            statistics[
+                "popularity_normalized"
+            ] = (
+
+                statistics[
+                    "popularity_score"
+                ]
+
+                /
+
+                max_score
+            )
+
+        else:
+
+            statistics[
+                "popularity_normalized"
+            ] = 0.0
+
+        return dict(
+            zip(
+                statistics[
+                    "movieId"
+                ].astype(int),
+
+                statistics[
+                    "popularity_normalized"
+                ]
+            )
+        )
+
+    # DIVERSITY-AWARE RERANKING
+
+    def diversify_recommendations(
+        self,
+        recommendations,
+        number_of_recommendations=10,
+        diversity_weight=0.25
+    ):
+
+        if not recommendations:
+
+            return []
+
+        if (
+            len(recommendations)
+            <= number_of_recommendations
+        ):
+
+            return recommendations
+
+        candidates = (
+            recommendations.copy()
+        )
+
+        # Highest hybrid score first
+
+        candidates.sort(
+            key=lambda item:
+                item.get(
+                    "hybrid_score",
+                    item.get(
+                        "recommendation_score",
+                        0
+                    )
+                ),
+            reverse=True
+        )
+
+        selected = []
+
+        # First recommendation
+
+        first_movie = candidates.pop(
+            0
+        )
+
+        first_movie[
+            "diversity_score"
+        ] = round(
+            float(
+                first_movie.get(
+                    "hybrid_score",
+                    0
+                )
+            ),
+            4
+        )
+
+        selected.append(
+            first_movie
+        )
+
+        # Select remaining recommendations
+
+        while (
+            candidates
+            and
+            len(selected)
+            < number_of_recommendations
+        ):
+
+            best_candidate = None
+
+            best_score = float(
+                "-inf"
+            )
+
+            for candidate in candidates:
+
+                base_score = float(
+                    candidate.get(
+                        "hybrid_score",
+                        candidate.get(
+                            "recommendation_score",
+                            0
+                        )
+                    )
+                )
+
+                candidate_genres = set(
+                    self._get_genres(
+                        candidate.get(
+                            "genres",
+                            ""
+                        )
+                    )
+                )
+
+                maximum_overlap = 0.0
+
+                # Compare with selected movies
+
+                for selected_movie in selected:
+
+                    selected_genres = set(
+                        self._get_genres(
+                            selected_movie.get(
+                                "genres",
+                                ""
+                            )
+                        )
+                    )
+
+                    if (
+                        not candidate_genres
+                        or
+                        not selected_genres
+                    ):
+
+                        overlap = 0.0
+
+                    else:
+
+                        intersection = (
+                            candidate_genres
+                            &
+                            selected_genres
+                        )
+
+                        union = (
+                            candidate_genres
+                            |
+                            selected_genres
+                        )
+
+                        if union:
+
+                            overlap = (
+                                len(
+                                    intersection
+                                )
+                                /
+                                len(
+                                    union
+                                )
+                            )
+
+                        else:
+
+                            overlap = 0.0
+
+                    maximum_overlap = max(
+                        maximum_overlap,
+                        overlap
+                    )
+
+                # Apply diversity penalty
+
+                diversity_score = (
+                    base_score
+                    *
+                    (
+                        1
+                        -
+                        (
+                            diversity_weight
+                            *
+                            maximum_overlap
+                        )
+                    )
+                )
+
+                if (
+                    diversity_score
+                    > best_score
+                ):
+
+                    best_score = (
+                        diversity_score
+                    )
+
+                    best_candidate = candidate
+
+            if best_candidate is None:
+
+                break
+
+            best_candidate[
+                "diversity_score"
+            ] = round(
+                float(best_score),
+                4
+            )
+
+            selected.append(
+                best_candidate
+            )
+
+            candidates.remove(
+                best_candidate
+            )
+
+        return selected
+
     # PERSONALIZED HYBRID RECOMMENDATION
 
     def recommend_for_user(
@@ -490,11 +674,11 @@ class MovieRecommender:
         minimum_rating=4.0
     ):
 
-        if ratings is None:
-
-            return []
-
-        if ratings.empty:
+        if (
+            ratings is None
+            or
+            ratings.empty
+        ):
 
             return []
 
@@ -510,26 +694,26 @@ class MovieRecommender:
 
                 return []
 
-        ratings = ratings.copy()
+        data = ratings.copy()
 
-        # Normalize data types
+        # Normalize types
 
-        ratings["userId"] = (
-            ratings["userId"]
+        data["userId"] = (
+            data["userId"]
             .astype(str)
         )
 
-        ratings["movieId"] = pd.to_numeric(
-            ratings["movieId"],
+        data["movieId"] = pd.to_numeric(
+            data["movieId"],
             errors="coerce"
         )
 
-        ratings["rating"] = pd.to_numeric(
-            ratings["rating"],
+        data["rating"] = pd.to_numeric(
+            data["rating"],
             errors="coerce"
         )
 
-        ratings = ratings.dropna(
+        data = data.dropna(
             subset=[
                 "userId",
                 "movieId",
@@ -541,41 +725,44 @@ class MovieRecommender:
             user_id
         )
 
-        # Get current user's ratings
+        # Current user's ratings
 
-        user_ratings = ratings[
-            ratings["userId"] == user_id
+        user_ratings = data[
+            data["userId"] == user_id
         ]
 
         if user_ratings.empty:
 
             return []
 
-        # Get liked movies
+        # Movies user liked
 
-        liked_ratings = user_ratings[
-            user_ratings["rating"]
-            >= minimum_rating
-        ].sort_values(
-            "rating",
-            ascending=False
+        liked_ratings = (
+            user_ratings[
+                user_ratings["rating"]
+                >= minimum_rating
+            ]
+            .sort_values(
+                "rating",
+                ascending=False
+            )
         )
 
         if liked_ratings.empty:
 
             return []
 
-        # Popularity scores
+        # Popularity
 
         popularity_scores = (
             self.calculate_popularity_scores(
-                ratings
+                data
             )
         )
 
         recommendation_scores = {}
 
-        # Generate recommendations
+        # Generate candidates from liked movies
 
         for _, rating_row in (
             liked_ratings.iterrows()
@@ -589,34 +776,38 @@ class MovieRecommender:
                 rating_row["rating"]
             )
 
-            source_rows = self.movies[
-                self.movies["movieId"]
-                == source_movie_id
-            ]
+            source_movie = (
+                self.get_movie_by_id(
+                    source_movie_id
+                )
+            )
 
-            if source_rows.empty:
+            if source_movie is None:
 
                 continue
-
-            source_movie = (
-                source_rows.iloc[0]
-            )
 
             source_movie_title = (
                 source_movie["title"]
             )
 
-            recommendations = self.recommend(
-                movie_title=source_movie_title,
-                number_of_recommendations=(
-                    number_of_recommendations * 5
+            recommendations = (
+                self.recommend(
+                    movie_title=source_movie_title,
+                    number_of_recommendations=(
+                        number_of_recommendations
+                        * 5
+                    )
                 )
             )
 
-            for recommendation in recommendations:
+            for recommendation in (
+                recommendations
+            ):
 
                 recommended_movie_id = int(
-                    recommendation["movieId"]
+                    recommendation[
+                        "movieId"
+                    ]
                 )
 
                 similarity_score = float(
@@ -625,9 +816,13 @@ class MovieRecommender:
                     ]
                 )
 
-                rating_preference_score = (
+                # User preference score
+
+                preference_score = (
                     user_rating / 5.0
                 )
+
+                # Popularity score
 
                 popularity_score = float(
                     popularity_scores.get(
@@ -636,27 +831,23 @@ class MovieRecommender:
                     )
                 )
 
-                # Hybrid score
-                #
-                # Content      = 60%
-                # Preference   = 25%
-                # Popularity   = 15%
+                # HYBRID SCORE
+                # Content similarity = 60%
+                # User preference = 25%
+                # Popularity = 15%
 
                 hybrid_score = (
-
                     similarity_score
                     * 0.60
-
                     +
-
-                    rating_preference_score
+                    preference_score
                     * 0.25
-
                     +
-
                     popularity_score
                     * 0.15
                 )
+
+                # New candidate
 
                 if (
                     recommended_movie_id
@@ -667,7 +858,8 @@ class MovieRecommender:
                         recommended_movie_id
                     ] = {
 
-                        "hybrid_score": 0.0,
+                        "hybrid_score":
+                            0.0,
 
                         "similarity_score":
                             similarity_score,
@@ -684,6 +876,8 @@ class MovieRecommender:
                         "source_user_rating":
                             user_rating
                     }
+
+                # Accumulate score
 
                 recommendation_scores[
                     recommended_movie_id
@@ -725,7 +919,7 @@ class MovieRecommender:
                         user_rating
                     )
 
-        # Remove already-rated movies
+        # Remove movies user already rated
 
         rated_movie_ids = set(
             user_ratings[
@@ -736,12 +930,9 @@ class MovieRecommender:
         )
 
         recommendation_scores = {
-
             movie_id: data
-
             for movie_id, data
             in recommendation_scores.items()
-
             if movie_id
             not in rated_movie_ids
         }
@@ -750,7 +941,7 @@ class MovieRecommender:
 
             return []
 
-        # Convert to candidate list
+        # Create candidate list
 
         candidates = []
 
@@ -759,85 +950,88 @@ class MovieRecommender:
             recommendation_data
         ) in recommendation_scores.items():
 
-            movie_rows = self.movies[
-                self.movies["movieId"]
-                == movie_id
-            ]
+            movie = self.get_movie_by_id(
+                movie_id
+            )
 
-            if movie_rows.empty:
+            if movie is None:
 
                 continue
 
-            movie = movie_rows.iloc[0]
-
             candidates.append({
 
-                "movieId": int(
-                    movie["movieId"]
-                ),
+                "movieId":
+                    movie["movieId"],
 
-                "title": movie["title"],
+                "title":
+                    movie["title"],
 
-                "genres": movie["genres"],
+                "genres":
+                    movie["genres"],
 
-                "similarity_score": round(
-                    float(
-                        recommendation_data[
-                            "similarity_score"
-                        ]
+                "similarity_score":
+                    round(
+                        float(
+                            recommendation_data[
+                                "similarity_score"
+                            ]
+                        ),
+                        4
                     ),
-                    4
-                ),
 
-                "popularity_score": round(
-                    float(
-                        recommendation_data[
-                            "popularity_score"
-                        ]
+                "popularity_score":
+                    round(
+                        float(
+                            recommendation_data[
+                                "popularity_score"
+                            ]
+                        ),
+                        4
                     ),
-                    4
-                ),
 
-                "recommendation_score": round(
+                "recommendation_score":
+                    round(
+                        float(
+                            recommendation_data[
+                                "hybrid_score"
+                            ]
+                        ),
+                        4
+                    ),
+
+                "hybrid_score":
                     float(
                         recommendation_data[
                             "hybrid_score"
                         ]
                     ),
-                    4
-                ),
 
-                "hybrid_score": float(
-                    recommendation_data[
-                        "hybrid_score"
-                    ]
-                ),
-
-                "sourceMovieId": int(
-                    recommendation_data[
-                        "source_movie_id"
-                    ]
-                ),
-
-                "sourceMovieTitle": (
-                    recommendation_data[
-                        "source_movie_title"
-                    ]
-                ),
-
-                "sourceUserRating": round(
-                    float(
+                "sourceMovieId":
+                    int(
                         recommendation_data[
-                            "source_user_rating"
+                            "source_movie_id"
                         ]
                     ),
-                    1
-                )
+
+                "sourceMovieTitle":
+                    recommendation_data[
+                        "source_movie_title"
+                    ],
+
+                "sourceUserRating":
+                    round(
+                        float(
+                            recommendation_data[
+                                "source_user_rating"
+                            ]
+                        ),
+                        1
+                    )
             })
 
         # Diversity-aware reranking
 
-        diverse_results = (
+        recommendations = (
             self.diversify_recommendations(
                 recommendations=candidates,
                 number_of_recommendations=(
@@ -847,72 +1041,42 @@ class MovieRecommender:
             )
         )
 
-        # Remove internal scoring field
+        # Remove internal field
 
-        for item in diverse_results:
+        for item in recommendations:
 
             item.pop(
                 "hybrid_score",
                 None
             )
 
-        return diverse_results
+        return recommendations
 
     # COLD-START RECOMMENDATIONS
 
     def get_cold_start_recommendations(
         self,
-        number_of_recommendations=10
+        number_of_recommendations=10,
+        minimum_ratings=10
     ):
+
+        # Check ratings
 
         if self.ratings.empty:
 
             return []
 
-        required_columns = [
-            "movieId",
-            "rating"
-        ]
+        # Calculate statistics
 
-        for column in required_columns:
-
-            if column not in self.ratings.columns:
-
-                return []
-
-        ratings = self.ratings.copy()
-
-        ratings["movieId"] = pd.to_numeric(
-            ratings["movieId"],
-            errors="coerce"
-        )
-
-        ratings["rating"] = pd.to_numeric(
-            ratings["rating"],
-            errors="coerce"
-        )
-
-        ratings = ratings.dropna(
-            subset=[
-                "movieId",
-                "rating"
-            ]
-        )
-
-        if ratings.empty:
-
-            return []
-
-        # Calculate movie statistics
-
-        movie_statistics = (
-            ratings
+        statistics = (
+            self.ratings
             .groupby("movieId")
             .agg(
                 averageRating=(
                     "rating",
                     "mean"
                 ),
+
                 totalRatings=(
                     "rating",
                     "count"
@@ -921,46 +1085,40 @@ class MovieRecommender:
             .reset_index()
         )
 
-        # Minimum rating count
-        #
-        # Avoid recommending movies with only
-        # one or two ratings.
+        # Minimum rating threshold
 
-        movie_statistics = (
-            movie_statistics[
-                movie_statistics[
-                    "totalRatings"
-                ] >= 10
+        statistics = statistics[
+            statistics[
+                "totalRatings"
             ]
-        )
+            >= minimum_ratings
+        ]
 
-        if movie_statistics.empty:
+        if statistics.empty:
 
             return []
 
-        # Popularity formula
+        # Cold-start score
+        # Average rating × log(rating count + 1)
 
-        movie_statistics[
+        statistics[
             "coldStartScore"
         ] = (
-
-            movie_statistics[
+            statistics[
                 "averageRating"
             ]
-
             *
-
             np.log1p(
-                movie_statistics[
+                statistics[
                     "totalRatings"
                 ]
             )
         )
 
-        # Sort
+        # Sort candidates
 
-        movie_statistics = (
-            movie_statistics
+        statistics = (
+            statistics
             .sort_values(
                 "coldStartScore",
                 ascending=False
@@ -973,68 +1131,78 @@ class MovieRecommender:
         candidates = []
 
         for _, row in (
-            movie_statistics.iterrows()
+            statistics.iterrows()
         ):
 
             movie_id = int(
                 row["movieId"]
             )
 
-            movie_rows = self.movies[
-                self.movies["movieId"]
-                == movie_id
-            ]
+            movie = self.get_movie_by_id(
+                movie_id
+            )
 
-            if movie_rows.empty:
+            if movie is None:
 
                 continue
 
-            movie = movie_rows.iloc[0]
-
             candidates.append({
 
-                "movieId": movie_id,
+                "movieId":
+                    movie["movieId"],
 
-                "title": movie["title"],
+                "title":
+                    movie["title"],
 
-                "genres": movie["genres"],
+                "genres":
+                    movie["genres"],
 
-                "averageRating": round(
-                    float(
-                        row["averageRating"]
+                "averageRating":
+                    round(
+                        float(
+                            row[
+                                "averageRating"
+                            ]
+                        ),
+                        2
                     ),
-                    2
-                ),
 
-                "totalRatings": int(
-                    row["totalRatings"]
-                ),
-
-                "coldStartScore": round(
-                    float(
-                        row["coldStartScore"]
+                "totalRatings":
+                    int(
+                        row[
+                            "totalRatings"
+                        ]
                     ),
-                    4
-                ),
 
-                "recommendation_score": round(
-                    float(
-                        row["coldStartScore"]
+                "coldStartScore":
+                    round(
+                        float(
+                            row[
+                                "coldStartScore"
+                            ]
+                        ),
+                        4
                     ),
-                    4
-                )
+
+                "recommendation_score":
+                    round(
+                        float(
+                            row[
+                                "coldStartScore"
+                            ]
+                        ),
+                        4
+                    )
             })
 
-        # Apply diversity
+        # Diversity
 
-        diversified = (
-            self.diversify_cold_start(
-                candidates,
+        return self.diversify_cold_start(
+            recommendations=candidates,
+            number_of_recommendations=(
                 number_of_recommendations
             )
         )
-
-        return diversified
 
     # COLD-START DIVERSITY
 
@@ -1048,16 +1216,20 @@ class MovieRecommender:
 
             return []
 
-        if len(recommendations) <= number_of_recommendations:
+        if (
+            len(recommendations)
+            <= number_of_recommendations
+        ):
 
             return recommendations
 
-        candidates = recommendations.copy()
+        candidates = (
+            recommendations.copy()
+        )
 
         candidates.sort(
-            key=lambda item: item[
-                "coldStartScore"
-            ],
+            key=lambda item:
+                item["coldStartScore"],
             reverse=True
         )
 
@@ -1073,7 +1245,10 @@ class MovieRecommender:
         ):
 
             best_candidate = None
-            best_score = float("-inf")
+
+            best_score = float(
+                "-inf"
+            )
 
             for candidate in candidates:
 
@@ -1086,7 +1261,7 @@ class MovieRecommender:
                     )
                 )
 
-                max_overlap = 0.0
+                maximum_overlap = 0.0
 
                 for selected_movie in selected:
 
@@ -1100,10 +1275,14 @@ class MovieRecommender:
                     )
 
                     if (
-                        candidate_genres
-                        and
-                        selected_genres
+                        not candidate_genres
+                        or
+                        not selected_genres
                     ):
+
+                        overlap = 0.0
+
+                    else:
 
                         intersection = (
                             candidate_genres
@@ -1117,16 +1296,22 @@ class MovieRecommender:
                             selected_genres
                         )
 
-                        overlap = (
-                            len(intersection)
-                            /
-                            len(union)
-                        )
+                        if union:
 
-                        max_overlap = max(
-                            max_overlap,
-                            overlap
-                        )
+                            overlap = (
+                                len(intersection)
+                                /
+                                len(union)
+                            )
+
+                        else:
+
+                            overlap = 0.0
+
+                    maximum_overlap = max(
+                        maximum_overlap,
+                        overlap
+                    )
 
                 diversity_score = (
                     candidate[
@@ -1139,26 +1324,36 @@ class MovieRecommender:
                         (
                             0.25
                             *
-                            max_overlap
+                            maximum_overlap
                         )
                     )
                 )
 
                 if (
                     diversity_score
-                    >
-                    best_score
+                    > best_score
                 ):
 
                     best_score = (
                         diversity_score
                     )
 
-                    best_candidate = candidate
+                    best_candidate = (
+                        candidate
+                    )
 
             if best_candidate is None:
 
                 break
+
+            best_candidate[
+                "diversity_score"
+            ] = round(
+                float(
+                    best_score
+                ),
+                4
+            )
 
             selected.append(
                 best_candidate
@@ -1214,7 +1409,7 @@ class MovieRecommender:
             )
 
         print(
-            f"Model saved to: {model_path}"
+            f"\nModel saved to: {model_path}"
         )
 
 
@@ -1227,35 +1422,40 @@ if __name__ == "__main__":
     )
 
     print(
-        "HYBRID MOVIE RECOMMENDATION SYSTEM"
+        "MOVIE RECOMMENDATION AI TEST"
     )
 
     print(
         "========================================"
     )
 
+    # Initialize
+
     recommender = MovieRecommender()
 
-    # Content-based test
+    # Test 1: Content-based
 
-    movie = "Toy Story (1995)"
+    movie_title = "Toy Story (1995)"
 
     print(
-        f"\nContent-based recommendations "
-        f"for: {movie}"
+        "\n1. CONTENT-BASED RECOMMENDATIONS"
+    )
+
+    print(
+        f"Movie: {movie_title}"
     )
 
     print(
         "----------------------------------------"
     )
 
-    recommendations = recommender.recommend(
-        movie_title=movie,
+    content_results = recommender.recommend(
+        movie_title=movie_title,
         number_of_recommendations=10
     )
 
     for index, item in enumerate(
-        recommendations,
+        content_results,
         start=1
     ):
 
@@ -1263,23 +1463,28 @@ if __name__ == "__main__":
             f"{index}. "
             f"{item['title']} "
             f"| Similarity: "
-            f"{item['similarity_score']}"
+            f"{item['similarity_score']} "
+            f"| Genres: "
+            f"{item['genres']}"
         )
 
-    # Hybrid test
+    # Test 2: Personalized hybrid
+
+    print(
+        "\n2. PERSONALIZED HYBRID RECOMMENDATIONS"
+    )
+
+    print(
+        "MovieLens User ID: 1"
+    )
+
+    print(
+        "----------------------------------------"
+    )
 
     if not recommender.ratings.empty:
 
-        print(
-            "\nHybrid personalized recommendations "
-            "for MovieLens User 1:"
-        )
-
-        print(
-            "----------------------------------------"
-        )
-
-        personalized = (
+        personalized_results = (
             recommender.recommend_for_user(
                 user_id=1,
                 ratings=recommender.ratings,
@@ -1287,53 +1492,87 @@ if __name__ == "__main__":
             )
         )
 
-        for index, item in enumerate(
-            personalized,
-            start=1
-        ):
+        if personalized_results:
+
+            for index, item in enumerate(
+                personalized_results,
+                start=1
+            ):
+
+                print(
+                    f"{index}. "
+                    f"{item['title']} "
+                    f"| Score: "
+                    f"{item['recommendation_score']} "
+                    f"| Similarity: "
+                    f"{item['similarity_score']} "
+                    f"| Popularity: "
+                    f"{item['popularity_score']} "
+                    f"| Genres: "
+                    f"{item['genres']}"
+                )
+
+        else:
 
             print(
-                f"{index}. "
-                f"{item['title']} "
-                f"| Score: "
-                f"{item['recommendation_score']} "
-                f"| Genres: "
-                f"{item['genres']}"
+                "No personalized recommendations."
             )
 
-    # Cold-start test
+    else:
+
+        print(
+            "Ratings dataset unavailable."
+        )
+
+    # Test 3: Cold start
 
     print(
-        "\nCold-start recommendations:"
+        "\n3. COLD-START RECOMMENDATIONS"
     )
 
     print(
         "----------------------------------------"
     )
 
-    cold_start = (
+    cold_start_results = (
         recommender.get_cold_start_recommendations(
             number_of_recommendations=10
         )
     )
 
-    for index, item in enumerate(
-        cold_start,
-        start=1
-    ):
+    if cold_start_results:
+
+        for index, item in enumerate(
+            cold_start_results,
+            start=1
+        ):
+
+            print(
+                f"{index}. "
+                f"{item['title']} "
+                f"| Average Rating: "
+                f"{item['averageRating']} "
+                f"| Ratings: "
+                f"{item['totalRatings']} "
+                f"| Score: "
+                f"{item['coldStartScore']}"
+            )
+
+    else:
 
         print(
-            f"{index}. "
-            f"{item['title']} "
-            f"| Rating: "
-            f"{item['averageRating']} "
-            f"| Ratings: "
-            f"{item['totalRatings']} "
-            f"| Score: "
-            f"{item['coldStartScore']}"
+            "No cold-start recommendations."
         )
 
     # Save model
+
+    print(
+        "\n4. SAVING MODEL"
+    )
+
+    print(
+        "----------------------------------------"
+    )
 
     recommender.save_model()
 
@@ -1342,7 +1581,7 @@ if __name__ == "__main__":
     )
 
     print(
-        "Recommendation tests completed."
+        "ALL RECOMMENDATION TESTS COMPLETED"
     )
 
     print(
