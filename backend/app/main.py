@@ -8,6 +8,10 @@ from app.api.routes.movies import (
     router as movie_router
 )
 
+from app.api.routes.ratings import (
+    router as rating_router
+)
+
 from app.api.routes.recommendations import (
     router as recommendation_router
 )
@@ -37,6 +41,10 @@ app.include_router(
 
 app.include_router(
     movie_router
+)
+
+app.include_router(
+    rating_router
 )
 
 app.include_router(
