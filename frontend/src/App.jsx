@@ -9,6 +9,9 @@ import { AuthProvider } from "./context/AuthContext";
 
 import Home from "./pages/Home";
 import Login from "./pages/Login";
+import Register from "./pages/Register";
+import Recommendations from "./pages/Recommendations";
+import MovieDetails from "./pages/MovieDetails";
 
 function ProtectedRoute({ children }) {
   const token = localStorage.getItem("token");
