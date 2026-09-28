@@ -5,6 +5,8 @@ import api from "../services/api";
 import { useAuth } from "../context/AuthContext";
 
 import MovieGrid from "../components/MovieGrid";
+import MovieSearch from "../components/MovieSearch";
+
 
 function Recommendations() {
   const { user, logout } = useAuth();
@@ -13,17 +15,32 @@ function Recommendations() {
   const [popular, setPopular] = useState([]);
   const [trending, setTrending] = useState([]);
 
-  const [loadingPersonalized, setLoadingPersonalized] = useState(true);
-  const [loadingPopular, setLoadingPopular] = useState(true);
-  const [loadingTrending, setLoadingTrending] = useState(true);
+  const [loadingPersonalized, setLoadingPersonalized] =
+    useState(true);
+
+  const [loadingPopular, setLoadingPopular] =
+    useState(true);
+
+  const [loadingTrending, setLoadingTrending] =
+    useState(true);
 
   const [error, setError] = useState("");
+
+
+  // ============================================================
+  // FETCH DATA
+  // ============================================================
 
   useEffect(() => {
     fetchPersonalized();
     fetchPopular();
     fetchTrending();
   }, []);
+
+
+  // ============================================================
+  // PERSONALIZED RECOMMENDATIONS
+  // ============================================================
 
   const fetchPersonalized = async () => {
     try {
@@ -33,18 +50,30 @@ function Recommendations() {
         "/recommendations/personalized?limit=12"
       );
 
-      setPersonalized(response.data.recommendations || []);
+      setPersonalized(
+        response.data.recommendations || []
+      );
+
     } catch (error) {
-      console.error(error);
+      console.error(
+        "Personalized recommendations error:",
+        error
+      );
 
       setError(
         error.response?.data?.detail ||
           "Unable to load personalized recommendations."
       );
+
     } finally {
       setLoadingPersonalized(false);
     }
   };
+
+
+  // ============================================================
+  // POPULAR MOVIES
+  // ============================================================
 
   const fetchPopular = async () => {
     try {
@@ -59,12 +88,22 @@ function Recommendations() {
           response.data ||
           []
       );
+
     } catch (error) {
-      console.error(error);
+      console.error(
+        "Popular movies error:",
+        error
+      );
+
     } finally {
       setLoadingPopular(false);
     }
   };
+
+
+  // ============================================================
+  // TRENDING MOVIES
+  // ============================================================
 
   const fetchTrending = async () => {
     try {
@@ -79,31 +118,55 @@ function Recommendations() {
           response.data ||
           []
       );
+
     } catch (error) {
-      console.error(error);
+      console.error(
+        "Trending movies error:",
+        error
+      );
+
     } finally {
       setLoadingTrending(false);
     }
   };
 
+
+  // ============================================================
+  // UI
+  // ============================================================
+
   return (
     <div className="min-h-screen bg-slate-950 text-white">
 
-      {/* Navbar */}
+      {/* ======================================================
+          NAVBAR
+      ====================================================== */}
+
       <nav className="sticky top-0 z-50 border-b border-slate-800 bg-slate-950/90 backdrop-blur">
+
         <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
 
+          {/* Logo */}
           <Link
             to="/"
-            className="text-2xl font-bold"
+            className="text-2xl font-bold tracking-tight"
           >
-            Movie<span className="text-blue-500">AI</span>
+            Movie
+            <span className="text-blue-500">
+              AI
+            </span>
           </Link>
 
+
+          {/* Right Side */}
           <div className="flex items-center gap-4">
 
             <span className="hidden text-sm text-slate-400 sm:block">
-              Hi, {user?.name || "Movie Lover"} 👋
+              Hi,{" "}
+              <span className="font-medium text-white">
+                {user?.name || "Movie Lover"}
+              </span>{" "}
+              👋
             </span>
 
             <button
@@ -114,16 +177,27 @@ function Recommendations() {
             </button>
 
           </div>
+
         </div>
+
       </nav>
 
-      {/* Main */}
+
+      {/* ======================================================
+          MAIN CONTENT
+      ====================================================== */}
+
       <main className="mx-auto max-w-7xl px-6 py-10">
 
-        {/* Header */}
-        <section className="mb-12">
+
+        {/* ====================================================
+            HERO
+        ==================================================== */}
+
+        <section className="mb-10">
 
           <div className="max-w-3xl">
+
             <p className="mb-3 text-sm font-semibold uppercase tracking-wider text-blue-400">
               AI Movie Recommendation
             </p>
@@ -136,34 +210,53 @@ function Recommendations() {
             </h1>
 
             <p className="mt-4 text-lg leading-8 text-slate-400">
-              Discover movies using your ratings, movie
-              content, popularity, and AI-powered
-              recommendation algorithms.
+              Discover movies using your ratings,
+              movie content, popularity, and
+              AI-powered recommendation algorithms.
             </p>
+
           </div>
 
         </section>
 
-        {/* Error */}
+
+        {/* ====================================================
+            SEARCH
+        ==================================================== */}
+
+        <section className="mb-14">
+          <MovieSearch />
+        </section>
+
+
+        {/* ====================================================
+            ERROR
+        ==================================================== */}
+
         {error && (
-          <div className="mb-8 rounded-xl border border-red-500/30 bg-red-500/10 px-5 py-4 text-red-400">
+          <div className="mb-8 rounded-xl border border-red-500/30 bg-red-500/10 px-5 py-4 text-sm text-red-400">
             {error}
           </div>
         )}
 
-        {/* Personalized */}
-        <section className="mb-14">
 
-          <div className="mb-5 flex items-end justify-between">
-            <div>
-              <h2 className="text-2xl font-bold">
-                Recommended For You
-              </h2>
+        {/* ====================================================
+            PERSONALIZED
+        ==================================================== */}
 
-              <p className="mt-1 text-sm text-slate-500">
-                AI recommendations based on your preferences
-              </p>
-            </div>
+        <section className="mb-16">
+
+          <div className="mb-6">
+
+            <h2 className="text-2xl font-bold">
+              Recommended For You
+            </h2>
+
+            <p className="mt-1 text-sm text-slate-500">
+              AI recommendations based on your
+              movie preferences
+            </p>
+
           </div>
 
           <MovieGrid
@@ -174,17 +267,24 @@ function Recommendations() {
 
         </section>
 
-        {/* Trending */}
-        <section className="mb-14">
 
-          <div className="mb-5">
+        {/* ====================================================
+            TRENDING
+        ==================================================== */}
+
+        <section className="mb-16">
+
+          <div className="mb-6">
+
             <h2 className="text-2xl font-bold">
               Trending Now 🔥
             </h2>
 
             <p className="mt-1 text-sm text-slate-500">
-              Movies getting attention from viewers recently
+              Movies receiving recent attention
+              from viewers
             </p>
+
           </div>
 
           <MovieGrid
@@ -195,10 +295,15 @@ function Recommendations() {
 
         </section>
 
-        {/* Popular */}
-        <section className="mb-14">
 
-          <div className="mb-5">
+        {/* ====================================================
+            POPULAR
+        ==================================================== */}
+
+        <section className="mb-16">
+
+          <div className="mb-6">
+
             <h2 className="text-2xl font-bold">
               Popular Movies ⭐
             </h2>
@@ -206,6 +311,7 @@ function Recommendations() {
             <p className="mt-1 text-sm text-slate-500">
               Highly rated movies from the community
             </p>
+
           </div>
 
           <MovieGrid
@@ -216,13 +322,29 @@ function Recommendations() {
 
         </section>
 
+
       </main>
 
-      {/* Footer */}
-      <footer className="border-t border-slate-800 py-8">
-        <div className="mx-auto max-w-7xl px-6 text-center text-sm text-slate-500">
-          MovieAI — AI-powered movie recommendation system
+
+      {/* ======================================================
+          FOOTER
+      ====================================================== */}
+
+      <footer className="border-t border-slate-800">
+
+        <div className="mx-auto max-w-7xl px-6 py-8 text-center">
+
+          <p className="text-sm text-slate-500">
+            MovieAI — AI-powered movie recommendation system
+          </p>
+
+          <p className="mt-2 text-xs text-slate-600">
+            Content-based filtering • Hybrid recommendation •
+            Explainable AI
+          </p>
+
         </div>
+
       </footer>
 
     </div>
