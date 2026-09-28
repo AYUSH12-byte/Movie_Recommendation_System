@@ -14,13 +14,14 @@ BASE_DIR = os.path.abspath(
 )
 
 if BASE_DIR not in sys.path:
-
-    sys.path.append(
-        BASE_DIR
-    )
+    sys.path.append(BASE_DIR)
 
 
 from recommender import MovieRecommender
+
+from app.services.tmdb_service import (
+    search_tmdb_movie
+)
 
 
 # DATASET PATHS
@@ -41,9 +42,57 @@ RATINGS_PATH = os.path.join(
 # INITIALIZE RECOMMENDER
 
 recommender = MovieRecommender(
-    dataset_path=DATASET_PATH,
-    ratings_path=RATINGS_PATH
+    DATASET_PATH,
+    RATINGS_PATH
 )
+
+
+# ADD TMDB METADATA
+
+def enrich_recommendations_with_tmdb(
+    recommendations
+):
+    """
+    Add TMDB metadata to recommendation results.
+
+    Adds:
+    - tmdbId
+    - posterUrl
+    - backdropUrl
+    - overview
+    - releaseDate
+    - tmdbRating
+    - tmdbVoteCount
+    """
+
+    enriched_recommendations = []
+
+    for recommendation in recommendations:
+
+        recommendation = dict(
+            recommendation
+        )
+
+        title = recommendation.get(
+            "title",
+            ""
+        )
+
+        if title:
+            tmdb_data = search_tmdb_movie(
+                title
+            )
+
+            if tmdb_data:
+                recommendation.update(
+                    tmdb_data
+                )
+
+        enriched_recommendations.append(
+            recommendation
+        )
+
+    return enriched_recommendations
 
 
 # CONTENT-BASED RECOMMENDATION
@@ -53,9 +102,13 @@ def get_movie_recommendations(
     limit: int = 10
 ):
 
-    return recommender.recommend(
+    recommendations = recommender.recommend(
         movie_title=movie_title,
         number_of_recommendations=limit
+    )
+
+    return enrich_recommendations_with_tmdb(
+        recommendations
     )
 
 
@@ -71,10 +124,17 @@ def get_cold_start_recommendations(
         )
     )
 
+    recommendations = (
+        enrich_recommendations_with_tmdb(
+            recommendations
+        )
+    )
+
     return {
         "success": True,
         "hasProfile": False,
         "recommendationType": "cold_start",
+
         "algorithm": {
             "method": (
                 "Popularity-based cold-start "
@@ -82,11 +142,13 @@ def get_cold_start_recommendations(
             ),
             "minimumRatings": 10
         },
+
         "message": (
             "Popular movies are shown because "
             "there is not enough user rating "
             "history for personalized recommendations."
         ),
+
         "recommendations": recommendations
     }
 
@@ -99,13 +161,15 @@ def get_personalized_recommendations(
     limit: int = 10
 ):
 
-    # No ratings
+    # NO RATINGS
 
     if not ratings:
-
         return get_cold_start_recommendations(
             limit=limit
         )
+
+
+    # CREATE DATAFRAME
 
     ratings_df = pd.DataFrame(
         ratings
@@ -120,19 +184,21 @@ def get_personalized_recommendations(
     for column in required_columns:
 
         if column not in ratings_df.columns:
-
             return {
                 "success": False,
                 "hasProfile": False,
                 "recommendationType": "error",
+
                 "message": (
                     f"Missing required rating "
                     f"field: {column}"
                 ),
+
                 "recommendations": []
             }
 
-    # Normalize data types
+
+    # NORMALIZE DATA TYPES
 
     ratings_df["userId"] = (
         ratings_df["userId"]
@@ -156,7 +222,8 @@ def get_personalized_recommendations(
         ]
     )
 
-    # Check whether user has enough liked movies
+
+    # CHECK USER PROFILE
 
     user_ratings = ratings_df[
         ratings_df["userId"]
@@ -167,15 +234,16 @@ def get_personalized_recommendations(
         user_ratings["rating"] >= 4.0
     ]
 
-    # No useful preference profile
+
+    # NO USEFUL PREFERENCE PROFILE
 
     if liked_movies.empty:
-
         return get_cold_start_recommendations(
             limit=limit
         )
 
-    # Generate hybrid recommendations
+
+    # GENERATE HYBRID RECOMMENDATIONS
 
     recommendations = (
         recommender.recommend_for_user(
@@ -185,15 +253,16 @@ def get_personalized_recommendations(
         )
     )
 
-    # Safety fallback
+
+    # SAFETY FALLBACK
 
     if not recommendations:
-
         return get_cold_start_recommendations(
             limit=limit
         )
 
-    # Add explanations
+
+    # ADD EXPLANATIONS
 
     for recommendation in recommendations:
 
@@ -232,12 +301,9 @@ def get_personalized_recommendations(
 
         if (
             source_title
-            and
-            source_rating
+            and source_rating
         ):
-
             recommendation["reason"] = (
-
                 f"Recommended because you "
                 f"rated {source_title} "
                 f"{source_rating}/5. "
@@ -251,17 +317,26 @@ def get_personalized_recommendations(
             )
 
         else:
-
             recommendation["reason"] = (
-
                 "Recommended based on your "
                 "movie preferences, content "
                 "similarity, popularity, and "
                 "recommendation diversity."
             )
 
-    return {
 
+    # ADD TMDB METADATA
+
+    recommendations = (
+        enrich_recommendations_with_tmdb(
+            recommendations
+        )
+    )
+
+
+    # FINAL RESPONSE
+
+    return {
         "success": True,
 
         "hasProfile": True,
@@ -269,7 +344,6 @@ def get_personalized_recommendations(
         "recommendationType": "hybrid",
 
         "algorithm": {
-
             "contentWeight": 0.60,
 
             "preferenceWeight": 0.25,
@@ -280,7 +354,6 @@ def get_personalized_recommendations(
         },
 
         "message": (
-
             "Hybrid personalized recommendations "
             "generated successfully with "
             "diversity-aware reranking."
