@@ -1,11 +1,9 @@
 import os
-
 from datetime import datetime, timedelta, timezone
 
 import bcrypt
-
 from dotenv import load_dotenv
-from jose import JWTError, jwt
+from jose import jwt
 
 
 load_dotenv()
@@ -13,7 +11,7 @@ load_dotenv()
 
 JWT_SECRET_KEY = os.getenv(
     "JWT_SECRET_KEY",
-    "development-secret-key"
+    "movie-recommendation-system-secret-key-change-this"
 )
 
 JWT_ALGORITHM = os.getenv(
@@ -29,65 +27,44 @@ JWT_EXPIRE_MINUTES = int(
 )
 
 
-# ==========================================
-# PASSWORD HASHING
-# ==========================================
-
 def hash_password(password: str) -> str:
-
     password_bytes = password.encode("utf-8")
 
-    # bcrypt supports a maximum of 72 bytes
     if len(password_bytes) > 72:
         raise ValueError(
-            "Password cannot be longer than 72 bytes."
+            "Password cannot exceed 72 bytes."
         )
+
+    salt = bcrypt.gensalt()
 
     hashed = bcrypt.hashpw(
         password_bytes,
-        bcrypt.gensalt()
+        salt
     )
 
     return hashed.decode("utf-8")
 
 
-# ==========================================
-# PASSWORD VERIFICATION
-# ==========================================
-
 def verify_password(
-    plain_password: str,
+    password: str,
     hashed_password: str
 ) -> bool:
 
-    password_bytes = plain_password.encode("utf-8")
-
-    if len(password_bytes) > 72:
-        return False
-
     return bcrypt.checkpw(
-        password_bytes,
+        password.encode("utf-8"),
         hashed_password.encode("utf-8")
     )
 
 
-# ==========================================
-# CREATE JWT TOKEN
-# ==========================================
+def create_access_token(user_id: str) -> str:
 
-def create_access_token(
-    user_id: str
-) -> str:
-
-    expire = datetime.now(
-        timezone.utc
-    ) + timedelta(
+    expire = datetime.now(timezone.utc) + timedelta(
         minutes=JWT_EXPIRE_MINUTES
     )
 
     payload = {
-        "sub": user_id,
-        "exp": expire
+        "sub": str(user_id),
+        "exp": expire,
     }
 
     token = jwt.encode(
@@ -97,31 +74,3 @@ def create_access_token(
     )
 
     return token
-
-
-# ==========================================
-# DECODE JWT TOKEN
-# ==========================================
-
-def decode_access_token(
-    token: str
-):
-
-    try:
-
-        payload = jwt.decode(
-            token,
-            JWT_SECRET_KEY,
-            algorithms=[JWT_ALGORITHM]
-        )
-
-        user_id = payload.get("sub")
-
-        if not user_id:
-            return None
-
-        return user_id
-
-    except JWTError:
-
-        return None
