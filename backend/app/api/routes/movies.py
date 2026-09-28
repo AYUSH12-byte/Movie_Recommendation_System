@@ -10,7 +10,8 @@ from app.database.database import (
 
 from app.services.movie_service import (
     get_popular_movies,
-    get_trending_movies
+    get_trending_movies,
+    enrich_movie_with_tmdb
 )
 
 
@@ -83,18 +84,16 @@ def trending_movies(
 
 @router.get("/")
 def get_movies(
-    page: int = 1,
-    limit: int = 20
+    page: int = Query(
+        1,
+        ge=1
+    ),
+    limit: int = Query(
+        20,
+        ge=1,
+        le=100
+    )
 ):
-
-    if page < 1:
-        page = 1
-
-    if limit < 1:
-        limit = 20
-
-    if limit > 100:
-        limit = 100
 
     skip = (
         page - 1
@@ -132,14 +131,26 @@ def search_movies(
         ...,
         min_length=1
     ),
-    limit: int = 20
+    limit: int = Query(
+        20,
+        ge=1,
+        le=50
+    )
 ):
+
+    search_query = q.strip()
+
+    if not search_query:
+        raise HTTPException(
+            status_code=400,
+            detail="Search query cannot be empty"
+        )
 
     movies = list(
         movies_collection.find(
             {
                 "title": {
-                    "$regex": q,
+                    "$regex": search_query,
                     "$options": "i"
                 }
             },
@@ -150,11 +161,26 @@ def search_movies(
         .limit(limit)
     )
 
+    # Add TMDB metadata
+
+    enriched_movies = []
+
+    for movie in movies:
+        enriched_movie = (
+            enrich_movie_with_tmdb(
+                movie
+            )
+        )
+
+        enriched_movies.append(
+            enriched_movie
+        )
+
     return {
         "success": True,
-        "query": q,
-        "count": len(movies),
-        "movies": movies
+        "query": search_query,
+        "count": len(enriched_movies),
+        "movies": enriched_movies
     }
 
 
@@ -175,11 +201,16 @@ def get_movie(
     )
 
     if not movie:
-
         raise HTTPException(
             status_code=404,
             detail="Movie not found"
         )
+
+    # Add TMDB metadata
+
+    movie = enrich_movie_with_tmdb(
+        movie
+    )
 
     return {
         "success": True,

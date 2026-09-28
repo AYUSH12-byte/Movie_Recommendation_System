@@ -3,6 +3,43 @@ from app.database.database import (
     ratings_collection
 )
 
+from app.services.tmdb_service import (
+    search_tmdb_movie
+)
+
+
+# ENRICH MOVIE WITH TMDB DATA
+
+def enrich_movie_with_tmdb(movie):
+    """
+    Add TMDB metadata to a movie.
+
+    TMDB provides:
+    - TMDB ID
+    - Poster
+    - Backdrop
+    - Overview
+    - Release date
+    - TMDB rating
+    - TMDB vote count
+    """
+
+    if not movie:
+        return movie
+
+    movie = dict(movie)
+
+    tmdb_data = search_tmdb_movie(
+        movie.get("title", "")
+    )
+
+    if tmdb_data:
+        movie.update(
+            tmdb_data
+        )
+
+    return movie
+
 
 # GET POPULAR MOVIES
 
@@ -24,9 +61,11 @@ def get_popular_movies(
         {
             "$group": {
                 "_id": "$movieId",
+
                 "averageRating": {
                     "$avg": "$rating"
                 },
+
                 "totalRatings": {
                     "$sum": 1
                 }
@@ -44,12 +83,17 @@ def get_popular_movies(
         },
 
         # Calculate popularity score
+        #
+        # Formula:
+        #
+        # averageRating × ln(totalRatings + 1)
 
         {
             "$addFields": {
                 "popularityScore": {
                     "$multiply": [
                         "$averageRating",
+
                         {
                             "$ln": {
                                 "$add": [
@@ -106,22 +150,72 @@ def get_popular_movies(
         if not movie:
             continue
 
+        # Add TMDB metadata
+
+        movie = enrich_movie_with_tmdb(
+            movie
+        )
+
+        # Build response
+
         results.append({
             "movieId": movie_id,
-            "title": movie["title"],
+
+            "title": movie.get(
+                "title",
+                ""
+            ),
+
             "genres": movie.get(
                 "genres",
                 ""
             ),
+
+            # TMDB data
+
+            "tmdbId": movie.get(
+                "tmdbId"
+            ),
+
+            "posterUrl": movie.get(
+                "posterUrl"
+            ),
+
+            "backdropUrl": movie.get(
+                "backdropUrl"
+            ),
+
+            "overview": movie.get(
+                "overview",
+                ""
+            ),
+
+            "releaseDate": movie.get(
+                "releaseDate",
+                ""
+            ),
+
+            "tmdbRating": movie.get(
+                "tmdbRating"
+            ),
+
+            "tmdbVoteCount": movie.get(
+                "tmdbVoteCount"
+            ),
+
+            # Recommendation/popularity data
+
             "averageRating": round(
                 float(
                     item["averageRating"]
                 ),
                 2
             ),
+
             "totalRatings": int(
                 item["totalRatings"]
             ),
+
             "popularityScore": round(
                 float(
                     item["popularityScore"]
@@ -177,9 +271,11 @@ def get_trending_movies(
         {
             "$group": {
                 "_id": "$movieId",
+
                 "averageRating": {
                     "$avg": "$rating"
                 },
+
                 "recentRatings": {
                     "$sum": 1
                 }
@@ -187,6 +283,10 @@ def get_trending_movies(
         },
 
         # Calculate trending score
+        #
+        # Formula:
+        #
+        # averageRating × recentRatings
 
         {
             "$addFields": {
@@ -206,6 +306,8 @@ def get_trending_movies(
                 "trendingScore": -1
             }
         },
+
+        # Limit results
 
         {
             "$limit": limit
@@ -240,22 +342,72 @@ def get_trending_movies(
         if not movie:
             continue
 
+        # Add TMDB metadata
+
+        movie = enrich_movie_with_tmdb(
+            movie
+        )
+
+        # Build response
+
         results.append({
             "movieId": movie_id,
-            "title": movie["title"],
+
+            "title": movie.get(
+                "title",
+                ""
+            ),
+
             "genres": movie.get(
                 "genres",
                 ""
             ),
+
+            # TMDB data
+
+            "tmdbId": movie.get(
+                "tmdbId"
+            ),
+
+            "posterUrl": movie.get(
+                "posterUrl"
+            ),
+
+            "backdropUrl": movie.get(
+                "backdropUrl"
+            ),
+
+            "overview": movie.get(
+                "overview",
+                ""
+            ),
+
+            "releaseDate": movie.get(
+                "releaseDate",
+                ""
+            ),
+
+            "tmdbRating": movie.get(
+                "tmdbRating"
+            ),
+
+            "tmdbVoteCount": movie.get(
+                "tmdbVoteCount"
+            ),
+
+            # Trending data
+
             "averageRating": round(
                 float(
                     item["averageRating"]
                 ),
                 2
             ),
+
             "recentRatings": int(
                 item["recentRatings"]
             ),
+
             "trendingScore": round(
                 float(
                     item["trendingScore"]
