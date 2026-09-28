@@ -19,6 +19,10 @@ if BASE_DIR not in sys.path:
 
 from recommender import MovieRecommender
 
+from app.database.database import (
+    movies_collection
+)
+
 from app.services.tmdb_service import (
     search_tmdb_movie
 )
@@ -47,49 +51,166 @@ recommender = MovieRecommender(
 )
 
 
-# ADD TMDB METADATA
+# TMDB CACHE FIELDS
+
+TMDB_FIELDS = [
+    "tmdbId",
+    "posterUrl",
+    "backdropUrl",
+    "overview",
+    "releaseDate",
+    "tmdbRating",
+    "tmdbVoteCount"
+]
+
+
+# ENRICH SINGLE RECOMMENDATION
+
+def enrich_recommendation_with_tmdb(
+    recommendation
+):
+    """
+    Add TMDB metadata to one recommendation.
+
+    Flow:
+    Recommendation
+        ↓
+    MongoDB cache?
+        ↙     ↘
+      Yes      No
+       ↓       ↓
+     Return  TMDB API
+               ↓
+          Save MongoDB
+               ↓
+             Return
+    """
+
+    recommendation = dict(
+        recommendation
+    )
+
+    movie_id = recommendation.get(
+        "movieId"
+    )
+
+    title = recommendation.get(
+        "title",
+        ""
+    )
+
+
+    # INVALID MOVIE ID
+
+    if movie_id is None:
+        return recommendation
+
+
+    # FIND MOVIE IN MONGODB
+
+    movie = movies_collection.find_one(
+        {
+            "movieId": movie_id
+        },
+        {
+            "_id": 0
+        }
+    )
+
+
+    # USE CACHED TMDB DATA
+
+    if movie:
+
+        has_cached_metadata = any(
+            movie.get(field) is not None
+            for field in TMDB_FIELDS
+        )
+
+        if has_cached_metadata:
+
+            for field in TMDB_FIELDS:
+
+                value = movie.get(
+                    field
+                )
+
+                if value is not None:
+                    recommendation[field] = (
+                        value
+                    )
+
+            return recommendation
+
+
+    # TMDB CACHE NOT FOUND
+
+    if not title and movie:
+        title = movie.get(
+            "title",
+            ""
+        )
+
+    if not title:
+        return recommendation
+
+
+    # SEARCH TMDB
+
+    tmdb_data = search_tmdb_movie(
+        title
+    )
+
+    if not tmdb_data:
+        return recommendation
+
+
+    # ADD TMDB DATA TO RESPONSE
+
+    recommendation.update(
+        tmdb_data
+    )
+
+
+    # SAVE TMDB DATA TO MONGODB
+
+    movies_collection.update_one(
+        {
+            "movieId": movie_id
+        },
+        {
+            "$set": tmdb_data
+        }
+    )
+
+    return recommendation
+
+
+# ADD TMDB METADATA TO RECOMMENDATIONS
 
 def enrich_recommendations_with_tmdb(
     recommendations
 ):
     """
-    Add TMDB metadata to recommendation results.
+    Add TMDB metadata to all recommendations.
 
-    Adds:
-    - tmdbId
-    - posterUrl
-    - backdropUrl
-    - overview
-    - releaseDate
-    - tmdbRating
-    - tmdbVoteCount
+    Cached movies are read from MongoDB.
+    TMDB API is called only when metadata is
+    not already cached.
     """
 
     enriched_recommendations = []
 
     for recommendation in recommendations:
 
-        recommendation = dict(
-            recommendation
-        )
-
-        title = recommendation.get(
-            "title",
-            ""
-        )
-
-        if title:
-            tmdb_data = search_tmdb_movie(
-                title
+        enriched_recommendation = (
+            enrich_recommendation_with_tmdb(
+                recommendation
             )
-
-            if tmdb_data:
-                recommendation.update(
-                    tmdb_data
-                )
+        )
 
         enriched_recommendations.append(
-            recommendation
+            enriched_recommendation
         )
 
     return enriched_recommendations
@@ -107,9 +228,13 @@ def get_movie_recommendations(
         number_of_recommendations=limit
     )
 
-    return enrich_recommendations_with_tmdb(
-        recommendations
+    recommendations = (
+        enrich_recommendations_with_tmdb(
+            recommendations
+        )
     )
+
+    return recommendations
 
 
 # COLD-START RECOMMENDATIONS
@@ -175,6 +300,9 @@ def get_personalized_recommendations(
         ratings
     )
 
+
+    # REQUIRED COLUMNS
+
     required_columns = [
         "userId",
         "movieId",
@@ -184,6 +312,7 @@ def get_personalized_recommendations(
     for column in required_columns:
 
         if column not in ratings_df.columns:
+
             return {
                 "success": False,
                 "hasProfile": False,
@@ -299,10 +428,14 @@ def get_personalized_recommendations(
             )
         )
 
+
+        # PERSONALIZED EXPLANATION
+
         if (
             source_title
             and source_rating
         ):
+
             recommendation["reason"] = (
                 f"Recommended because you "
                 f"rated {source_title} "
@@ -316,7 +449,11 @@ def get_personalized_recommendations(
                 f"score of {diversity}."
             )
 
+
+        # GENERIC EXPLANATION
+
         else:
+
             recommendation["reason"] = (
                 "Recommended based on your "
                 "movie preferences, content "
@@ -345,11 +482,8 @@ def get_personalized_recommendations(
 
         "algorithm": {
             "contentWeight": 0.60,
-
             "preferenceWeight": 0.25,
-
             "popularityWeight": 0.15,
-
             "diversityWeight": 0.25
         },
 
