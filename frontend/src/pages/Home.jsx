@@ -1,232 +1,325 @@
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { useAuth } from "../context/AuthContext";
+
+import api from "../services/api";
+import MovieCard from "../components/MovieCard";
 
 function Home() {
-  const {
-    user,
-    isAuthenticated,
-    logout,
-  } = useAuth();
+  const [trendingMovies, setTrendingMovies] = useState([]);
+  const [popularMovies, setPopularMovies] = useState([]);
+
+  const [loadingTrending, setLoadingTrending] = useState(true);
+  const [loadingPopular, setLoadingPopular] = useState(true);
+
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    loadMovies();
+  }, []);
+
+  const loadMovies = async () => {
+    setError("");
+
+    try {
+      const [trendingResponse, popularResponse] =
+        await Promise.all([
+          api.get("/movies/trending?limit=10&days=30"),
+          api.get("/movies/popular?limit=10&minimum_ratings=3"),
+        ]);
+
+      setTrendingMovies(
+        trendingResponse.data?.movies || []
+      );
+
+      setPopularMovies(
+        popularResponse.data?.movies || []
+      );
+    } catch (error) {
+      console.error(
+        "Failed to load home movies:",
+        error
+      );
+
+      setError(
+        "Unable to load movies. Please make sure the backend is running."
+      );
+    } finally {
+      setLoadingTrending(false);
+      setLoadingPopular(false);
+    }
+  };
+
+  const heroMovie =
+    trendingMovies.find(
+      (movie) => movie.backdropUrl
+    ) ||
+    trendingMovies[0] ||
+    popularMovies[0];
 
   return (
     <div className="min-h-screen bg-slate-950 text-white">
 
-      {/* Navbar */}
-      <nav className="border-b border-slate-800 bg-slate-950/95">
+      {/* =====================================================
+          NAVBAR
+      ===================================================== */}
+
+      <header className="fixed left-0 right-0 top-0 z-50 border-b border-white/5 bg-slate-950/80 backdrop-blur-xl">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
 
           <Link
             to="/"
-            className="text-xl font-bold tracking-tight"
+            className="text-2xl font-black tracking-tight"
           >
             Movie<span className="text-blue-500">AI</span>
           </Link>
 
+          <nav className="hidden items-center gap-8 md:flex">
+
+            <Link
+              to="/"
+              className="text-sm font-medium text-white transition hover:text-blue-400"
+            >
+              Home
+            </Link>
+
+            <Link
+              to="/recommendations"
+              className="text-sm font-medium text-slate-400 transition hover:text-white"
+            >
+              Recommendations
+            </Link>
+
+          </nav>
+
           <div className="flex items-center gap-3">
 
-            {isAuthenticated ? (
-              <>
-                <Link
-                  to="/recommendations"
-                  className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium transition hover:bg-blue-700"
-                >
-                  My Recommendations
-                </Link>
+            <Link
+              to="/login"
+              className="rounded-lg border border-slate-700 px-4 py-2 text-sm font-medium text-slate-200 transition hover:border-blue-500 hover:text-white"
+            >
+              Login
+            </Link>
 
-                <button
-                  onClick={logout}
-                  className="rounded-lg border border-slate-700 px-4 py-2 text-sm font-medium transition hover:bg-slate-800"
-                >
-                  Logout
-                </button>
-              </>
-            ) : (
-              <>
-                <Link
-                  to="/login"
-                  className="rounded-lg px-4 py-2 text-sm font-medium text-slate-300 transition hover:text-white"
-                >
-                  Login
-                </Link>
-
-                <Link
-                  to="/register"
-                  className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium transition hover:bg-blue-700"
-                >
-                  Register
-                </Link>
-              </>
-            )}
+            <Link
+              to="/register"
+              className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-500"
+            >
+              Sign Up
+            </Link>
 
           </div>
+
         </div>
-      </nav>
+      </header>
 
-      {/* Hero */}
-      <main>
+      {/* =====================================================
+          HERO
+      ===================================================== */}
 
-        <section className="mx-auto max-w-7xl px-6 py-24">
+      <section className="relative min-h-[650px] overflow-hidden">
 
-          <div className="max-w-3xl">
+        {heroMovie?.backdropUrl ? (
+          <img
+            src={heroMovie.backdropUrl}
+            alt={heroMovie.title}
+            className="absolute inset-0 h-full w-full object-cover"
+          />
+        ) : (
+          <div className="absolute inset-0 bg-gradient-to-br from-blue-950 via-slate-950 to-slate-950" />
+        )}
 
-            <div className="mb-6 inline-flex rounded-full border border-blue-500/30 bg-blue-500/10 px-4 py-2 text-sm text-blue-400">
-              AI-Powered Movie Recommendation
-            </div>
+        <div className="absolute inset-0 bg-gradient-to-r from-slate-950 via-slate-950/80 to-transparent" />
 
-            <h1 className="text-5xl font-bold leading-tight tracking-tight md:text-6xl">
+        <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-transparent to-slate-950/30" />
 
-              Discover Movies
+        <div className="relative mx-auto flex min-h-[650px] max-w-7xl items-center px-6 pt-20">
+
+          <div className="max-w-2xl">
+
+            <span className="mb-5 inline-flex rounded-full border border-blue-400/20 bg-blue-500/10 px-4 py-2 text-sm font-semibold text-blue-400">
+              AI-Powered Movie Recommendations
+            </span>
+
+            <h1 className="text-5xl font-black leading-tight tracking-tight md:text-7xl">
+
+              Discover Your Next
               <span className="block text-blue-500">
-                You'll Love.
+                Favorite Movie
               </span>
 
             </h1>
 
-            <p className="mt-6 max-w-2xl text-lg leading-8 text-slate-400">
-
-              Get personalized movie recommendations
-              using content-based filtering, user
-              preferences, popularity, and hybrid
-              recommendation techniques.
-
+            <p className="mt-6 max-w-xl text-lg leading-8 text-slate-300">
+              Discover movies based on your interests,
+              ratings, movie similarity, popularity,
+              and intelligent recommendation algorithms.
             </p>
 
             <div className="mt-8 flex flex-wrap gap-4">
 
-              {isAuthenticated ? (
-                <Link
-                  to="/recommendations"
-                  className="rounded-xl bg-blue-600 px-6 py-3 font-semibold transition hover:bg-blue-700"
-                >
-                  Explore Recommendations
-                </Link>
-              ) : (
-                <>
-                  <Link
-                    to="/register"
-                    className="rounded-xl bg-blue-600 px-6 py-3 font-semibold transition hover:bg-blue-700"
-                  >
-                    Get Started
-                  </Link>
+              <Link
+                to="/recommendations"
+                className="rounded-xl bg-blue-600 px-6 py-3 font-semibold text-white transition hover:bg-blue-500"
+              >
+                Get Recommendations
+              </Link>
 
-                  <Link
-                    to="/login"
-                    className="rounded-xl border border-slate-700 px-6 py-3 font-semibold text-slate-300 transition hover:bg-slate-800 hover:text-white"
-                  >
-                    Login
-                  </Link>
-                </>
+              {heroMovie?.movieId && (
+                <Link
+                  to={`/movie/${heroMovie.movieId}`}
+                  className="rounded-xl border border-slate-600 bg-black/20 px-6 py-3 font-semibold text-white backdrop-blur transition hover:border-white"
+                >
+                  View Movie
+                </Link>
               )}
 
             </div>
 
           </div>
 
+        </div>
+
+      </section>
+
+      {/* =====================================================
+          MAIN CONTENT
+      ===================================================== */}
+
+      <main className="mx-auto max-w-7xl px-6 py-16">
+
+        {error && (
+          <div className="mb-10 rounded-xl border border-red-500/20 bg-red-500/10 px-5 py-4 text-sm text-red-300">
+            {error}
+          </div>
+        )}
+
+        {/* ===================================================
+            TRENDING
+        =================================================== */}
+
+        <section className="mb-16">
+
+          <div className="mb-7 flex items-end justify-between">
+
+            <div>
+              <p className="mb-2 text-sm font-semibold uppercase tracking-widest text-blue-500">
+                What's hot
+              </p>
+
+              <h2 className="text-3xl font-bold">
+                Trending Movies
+              </h2>
+            </div>
+
+            <span className="hidden text-sm text-slate-500 sm:block">
+              Last 30 days
+            </span>
+
+          </div>
+
+          {loadingTrending ? (
+            <MovieSkeleton />
+          ) : trendingMovies.length > 0 ? (
+            <div className="grid grid-cols-2 gap-5 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+              {trendingMovies.map((movie) => (
+                <MovieCard
+                  key={movie.movieId}
+                  movie={movie}
+                />
+              ))}
+            </div>
+          ) : (
+            <EmptyState message="No trending movies available yet." />
+          )}
+
         </section>
 
-        {/* Features */}
-        <section className="border-y border-slate-800 bg-slate-900/50">
+        {/* ===================================================
+            POPULAR
+        =================================================== */}
 
-          <div className="mx-auto grid max-w-7xl gap-6 px-6 py-16 md:grid-cols-3">
+        <section className="mb-16">
 
-            <div className="rounded-2xl border border-slate-800 bg-slate-900 p-6">
+          <div className="mb-7">
 
-              <div className="mb-4 text-3xl">
-                🎯
-              </div>
+            <p className="mb-2 text-sm font-semibold uppercase tracking-widest text-blue-500">
+              Most watched
+            </p>
 
-              <h2 className="text-xl font-semibold">
-                Personalized
-              </h2>
+            <h2 className="text-3xl font-bold">
+              Popular Movies
+            </h2>
 
-              <p className="mt-3 text-sm leading-6 text-slate-400">
-                Recommendations are generated
-                from your movie ratings and
-                preferences.
-              </p>
+          </div>
 
+          {loadingPopular ? (
+            <MovieSkeleton />
+          ) : popularMovies.length > 0 ? (
+            <div className="grid grid-cols-2 gap-5 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+              {popularMovies.map((movie) => (
+                <MovieCard
+                  key={movie.movieId}
+                  movie={movie}
+                />
+              ))}
             </div>
+          ) : (
+            <EmptyState message="No popular movies available yet." />
+          )}
 
-            <div className="rounded-2xl border border-slate-800 bg-slate-900 p-6">
+        </section>
 
-              <div className="mb-4 text-3xl">
-                🤖
-              </div>
+        {/* ===================================================
+            CTA
+        =================================================== */}
 
-              <h2 className="text-xl font-semibold">
-                AI Powered
-              </h2>
+        <section className="overflow-hidden rounded-3xl border border-blue-500/20 bg-gradient-to-br from-blue-600/20 via-slate-900 to-slate-900 p-8 md:p-12">
 
-              <p className="mt-3 text-sm leading-6 text-slate-400">
-                Uses TF-IDF, cosine similarity,
-                popularity scoring and hybrid
-                recommendation techniques.
-              </p>
+          <div className="max-w-2xl">
 
-            </div>
+            <p className="text-sm font-semibold uppercase tracking-widest text-blue-400">
+              Personalized for you
+            </p>
 
-            <div className="rounded-2xl border border-slate-800 bg-slate-900 p-6">
+            <h2 className="mt-3 text-3xl font-bold md:text-4xl">
+              Let AI find movies you'll love.
+            </h2>
 
-              <div className="mb-4 text-3xl">
-                💡
-              </div>
+            <p className="mt-4 leading-7 text-slate-400">
+              Rate movies you have watched and our
+              recommendation engine will learn your
+              preferences and suggest movies based on
+              your taste.
+            </p>
 
-              <h2 className="text-xl font-semibold">
-                Explainable
-              </h2>
-
-              <p className="mt-3 text-sm leading-6 text-slate-400">
-                Understand why a movie was
-                recommended based on your
-                preferences.
-              </p>
-
-            </div>
+            <Link
+              to="/recommendations"
+              className="mt-7 inline-block rounded-xl bg-blue-600 px-6 py-3 font-semibold text-white transition hover:bg-blue-500"
+            >
+              Explore Recommendations
+            </Link>
 
           </div>
 
         </section>
 
-        {/* User section */}
-        {isAuthenticated && (
-          <section className="mx-auto max-w-7xl px-6 py-16">
-
-            <div className="rounded-2xl border border-slate-800 bg-slate-900 p-8">
-
-              <p className="text-sm text-slate-400">
-                Welcome back
-              </p>
-
-              <h2 className="mt-2 text-2xl font-bold">
-                {user?.name || user?.email}
-              </h2>
-
-              <p className="mt-2 text-slate-400">
-                Your personalized movie
-                recommendations are waiting.
-              </p>
-
-              <Link
-                to="/recommendations"
-                className="mt-6 inline-block rounded-lg bg-blue-600 px-5 py-3 font-medium transition hover:bg-blue-700"
-              >
-                View Recommendations
-              </Link>
-
-            </div>
-
-          </section>
-        )}
-
       </main>
 
-      {/* Footer */}
+      {/* =====================================================
+          FOOTER
+      ===================================================== */}
+
       <footer className="border-t border-slate-800">
 
-        <div className="mx-auto max-w-7xl px-6 py-8 text-center text-sm text-slate-500">
+        <div className="mx-auto flex max-w-7xl flex-col gap-4 px-6 py-8 text-sm text-slate-500 sm:flex-row sm:items-center sm:justify-between">
 
-          MovieAI — AI-powered movie
-          recommendation system
+          <p>
+            © {new Date().getFullYear()} MovieAI
+          </p>
+
+          <p>
+            AI-powered movie recommendation system
+          </p>
 
         </div>
 
@@ -235,5 +328,59 @@ function Home() {
     </div>
   );
 }
+
+
+/* ============================================================
+   LOADING SKELETON
+============================================================ */
+
+function MovieSkeleton() {
+  return (
+    <div className="grid grid-cols-2 gap-5 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+
+      {Array.from({ length: 5 }).map(
+        (_, index) => (
+          <div
+            key={index}
+            className="overflow-hidden rounded-xl border border-slate-800 bg-slate-900"
+          >
+            <div className="aspect-[2/3] animate-pulse bg-slate-800" />
+
+            <div className="space-y-3 p-4">
+
+              <div className="h-4 animate-pulse rounded bg-slate-800" />
+
+              <div className="h-3 w-2/3 animate-pulse rounded bg-slate-800" />
+
+            </div>
+          </div>
+        )
+      )}
+
+    </div>
+  );
+}
+
+
+/* ============================================================
+   EMPTY STATE
+============================================================ */
+
+function EmptyState({ message }) {
+  return (
+    <div className="rounded-xl border border-slate-800 bg-slate-900/50 px-6 py-12 text-center">
+
+      <div className="text-4xl">
+        🎬
+      </div>
+
+      <p className="mt-4 text-sm text-slate-500">
+        {message}
+      </p>
+
+    </div>
+  );
+}
+
 
 export default Home;
