@@ -1,3 +1,4 @@
+import argparse
 import os
 import sys
 import time
@@ -18,20 +19,14 @@ if BASE_DIR not in sys.path:
 
 # IMPORT DATABASE
 
-from app.database.database import (
-    movies_collection
-)
-
-from app.services.tmdb_service import (
-    search_tmdb_movie
-)
+from app.database.database import movies_collection
+from app.services.tmdb_service import search_tmdb_movie
 
 
 # CONFIGURATION
 
-BATCH_SIZE = 100
-
-REQUEST_DELAY = 0.25
+DEFAULT_LIMIT = 100
+DEFAULT_DELAY = 0.25
 
 
 # TMDB FIELDS
@@ -47,23 +42,77 @@ TMDB_FIELDS = [
 ]
 
 
+# ARGUMENTS
+
+def parse_arguments():
+
+    parser = argparse.ArgumentParser(
+        description=(
+            "Enrich MongoDB movies with TMDB metadata."
+        )
+    )
+
+    parser.add_argument(
+        "--limit",
+        type=int,
+        default=DEFAULT_LIMIT,
+        help=(
+            "Number of movies to process. "
+            "Default: 100"
+        )
+    )
+
+    parser.add_argument(
+        "--skip",
+        type=int,
+        default=0,
+        help=(
+            "Number of unenriched movies to skip. "
+            "Default: 0"
+        )
+    )
+
+    parser.add_argument(
+        "--delay",
+        type=float,
+        default=DEFAULT_DELAY,
+        help=(
+            "Delay between TMDB requests in seconds. "
+            "Default: 0.25"
+        )
+    )
+
+    return parser.parse_args()
+
+
 # ENRICH MOVIES
 
-def enrich_movies():
+def enrich_movies(
+    limit,
+    skip,
+    delay
+):
+
+    query = {
+        "tmdbId": {
+            "$exists": False
+        }
+    }
 
     movies = movies_collection.find(
-        {
-            "tmdbId": {
-                "$exists": False
-            }
-        },
+        query,
         {
             "_id": 0,
             "movieId": 1,
             "title": 1
         }
+    ).sort(
+        "movieId",
+        1
+    ).skip(
+        skip
     ).limit(
-        BATCH_SIZE
+        limit
     )
 
     movies = list(
@@ -74,40 +123,26 @@ def enrich_movies():
         movies
     )
 
-    print(
-        "=================================================="
-    )
-
-    print(
-        "TMDB MOVIE ENRICHMENT"
-    )
-
-    print(
-        "=================================================="
-    )
-
-    print(
-        f"Movies selected: {total}"
-    )
-
-    print(
-        f"Request delay: {REQUEST_DELAY} seconds"
-    )
-
-    print(
-        "=================================================="
-    )
+    print()
+    print("=" * 60)
+    print("TMDB MOVIE ENRICHMENT")
+    print("=" * 60)
+    print(f"Selected movies : {total}")
+    print(f"Skip            : {skip}")
+    print(f"Delay           : {delay}s")
+    print("=" * 60)
 
     if not movies:
 
+        print()
         print(
-            "No movies need TMDB enrichment."
+            "No unenriched movies found."
         )
+        print()
 
         return
 
     success_count = 0
-
     failed_count = 0
 
 
@@ -128,15 +163,22 @@ def enrich_movies():
         )
 
         print()
+        print(
+            f"[{index}/{total}] "
+            f"Movie ID: {movie_id}"
+        )
 
         print(
-            f"[{index}/{total}] {title}"
+            f"Title: {title}"
         )
+
+
+        # EMPTY TITLE
 
         if not title:
 
             print(
-                "SKIPPED: Movie title is empty."
+                "SKIPPED: Empty movie title."
             )
 
             failed_count += 1
@@ -144,28 +186,47 @@ def enrich_movies():
             continue
 
 
-        # SEARCH TMDB
+        # TMDB SEARCH
 
-        tmdb_data = search_tmdb_movie(
-            title
-        )
+        try:
 
-        if not tmdb_data:
+            tmdb_data = search_tmdb_movie(
+                title
+            )
+
+        except Exception as error:
 
             print(
-                "FAILED: TMDB movie not found."
+                f"ERROR: {error}"
             )
 
             failed_count += 1
 
             time.sleep(
-                REQUEST_DELAY
+                delay
             )
 
             continue
 
 
-        # SAVE TO MONGODB
+        # TMDB NOT FOUND
+
+        if not tmdb_data:
+
+            print(
+                "NOT FOUND: TMDB returned no result."
+            )
+
+            failed_count += 1
+
+            time.sleep(
+                delay
+            )
+
+            continue
+
+
+        # PREPARE DATA
 
         update_data = {}
 
@@ -188,10 +249,13 @@ def enrich_movies():
             failed_count += 1
 
             time.sleep(
-                REQUEST_DELAY
+                delay
             )
 
             continue
+
+
+        # SAVE TO MONGODB
 
         movies_collection.update_one(
             {
@@ -202,67 +266,93 @@ def enrich_movies():
             }
         )
 
-
-        # SUCCESS
-
         success_count += 1
 
+
+        # SUCCESS OUTPUT
+
         print(
-            "SUCCESS:"
+            "SUCCESS"
         )
 
         print(
-            f"  TMDB ID: {tmdb_data.get('tmdbId')}"
+            f"TMDB ID: "
+            f"{tmdb_data.get('tmdbId')}"
         )
 
         print(
-            f"  Poster: {tmdb_data.get('posterUrl')}"
+            f"Poster: "
+            f"{tmdb_data.get('posterUrl')}"
         )
 
         print(
-            f"  Release Date: {tmdb_data.get('releaseDate')}"
+            f"Release: "
+            f"{tmdb_data.get('releaseDate')}"
         )
+
+
+        # REQUEST DELAY
 
         time.sleep(
-            REQUEST_DELAY
+            delay
         )
 
 
     # SUMMARY
 
     print()
+    print("=" * 60)
+    print("ENRICHMENT COMPLETE")
+    print("=" * 60)
 
     print(
-        "=================================================="
+        f"Successful : {success_count}"
     )
 
     print(
-        "ENRICHMENT COMPLETE"
+        f"Failed     : {failed_count}"
     )
 
     print(
-        "=================================================="
+        f"Processed  : {total}"
     )
 
-    print(
-        f"Successful: {success_count}"
-    )
-
-    print(
-        f"Failed: {failed_count}"
-    )
-
-    print(
-        f"Total processed: {total}"
-    )
-
-    print(
-        "=================================================="
-    )
+    print("=" * 60)
+    print()
 
 
 # MAIN
 
 if __name__ == "__main__":
 
-    enrich_movies()
+    args = parse_arguments()
+
+    if args.limit < 1:
+
+        print(
+            "ERROR: --limit must be at least 1."
+        )
+
+        sys.exit(1)
+
+    if args.skip < 0:
+
+        print(
+            "ERROR: --skip cannot be negative."
+        )
+
+        sys.exit(1)
+
+    if args.delay < 0:
+
+        print(
+            "ERROR: --delay cannot be negative."
+        )
+
+        sys.exit(1)
+
+    enrich_movies(
+        limit=args.limit,
+        skip=args.skip,
+        delay=args.delay
+    )
