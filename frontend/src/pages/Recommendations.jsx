@@ -3,15 +3,31 @@ import { Link } from "react-router-dom";
 
 import api from "../services/api";
 import MovieCard from "../components/MovieCard";
+import Navbar from "../components/Navbar";
 
 function Recommendations() {
-  const [recommendations, setRecommendations] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [hasProfile, setHasProfile] = useState(false);
-  const [recommendationType, setRecommendationType] = useState("");
-  const [message, setMessage] = useState("");
-  const [algorithm, setAlgorithm] = useState(null);
+  const [recommendations, setRecommendations] =
+    useState([]);
+
+  const [loading, setLoading] =
+    useState(true);
+
+  const [error, setError] =
+    useState("");
+
+  const [hasProfile, setHasProfile] =
+    useState(false);
+
+  const [
+    recommendationType,
+    setRecommendationType,
+  ] = useState("");
+
+  const [message, setMessage] =
+    useState("");
+
+  const [algorithm, setAlgorithm] =
+    useState(null);
 
   useEffect(() => {
     loadRecommendations();
@@ -28,18 +44,34 @@ function Recommendations() {
 
       const data = response.data;
 
-      setRecommendations(data?.recommendations || []);
-      setHasProfile(Boolean(data?.hasProfile));
-      setRecommendationType(data?.recommendationType || "");
-      setMessage(data?.message || "");
-      setAlgorithm(data?.algorithm || null);
+      setRecommendations(
+        data?.recommendations || []
+      );
+
+      setHasProfile(
+        Boolean(data?.hasProfile)
+      );
+
+      setRecommendationType(
+        data?.recommendationType || ""
+      );
+
+      setMessage(
+        data?.message || ""
+      );
+
+      setAlgorithm(
+        data?.algorithm || null
+      );
     } catch (error) {
       console.error(
         "Failed to load recommendations:",
         error
       );
 
-      if (error.response?.status === 401) {
+      if (
+        error.response?.status === 401
+      ) {
         setError(
           "Please login to get personalized recommendations."
         );
@@ -56,9 +88,15 @@ function Recommendations() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-white">
+
+      {/* NAVBAR */}
+
       <Navbar />
 
       <main className="mx-auto max-w-7xl px-6 pb-20 pt-32">
+
+        {/* HEADER */}
+
         <section className="mb-12">
           <div className="max-w-3xl">
             <div className="mb-4 inline-flex rounded-full border border-blue-400/20 bg-blue-500/10 px-4 py-2 text-sm font-semibold text-blue-400">
@@ -67,6 +105,7 @@ function Recommendations() {
 
             <h1 className="text-4xl font-black tracking-tight md:text-6xl">
               Movies Picked
+
               <span className="text-blue-500">
                 {" "}For You
               </span>
@@ -80,6 +119,8 @@ function Recommendations() {
             </p>
           </div>
         </section>
+
+        {/* ERROR */}
 
         {error && (
           <section className="mb-10 rounded-2xl border border-yellow-500/20 bg-yellow-500/10 p-6">
@@ -104,104 +145,135 @@ function Recommendations() {
           </section>
         )}
 
-        {loading && <RecommendationSkeleton />}
+        {/* LOADING */}
 
-        {!loading && recommendations.length > 0 && (
-          <>
-            <section className="mb-10 grid gap-5 md:grid-cols-3">
-              <InfoCard
-                title="Recommendation Type"
-                value={
-                  recommendationType === "hybrid"
-                    ? "Hybrid AI"
-                    : "Cold Start"
-                }
-              />
+        {loading && (
+          <RecommendationSkeleton />
+        )}
 
-              <InfoCard
-                title="Movies Found"
-                value={recommendations.length}
-              />
+        {/* RECOMMENDATIONS */}
 
-              <InfoCard
-                title="User Profile"
-                value={
-                  hasProfile
-                    ? "Personalized"
-                    : "Building Profile"
-                }
-              />
-            </section>
+        {!loading &&
+          recommendations.length > 0 && (
+            <>
+              {/* INFO CARDS */}
 
-            {message && (
-              <section className="mb-10 rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
-                <div className="flex gap-4">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-500/10 text-xl">
-                    🤖
+              <section className="mb-10 grid gap-5 md:grid-cols-3">
+                <InfoCard
+                  title="Recommendation Type"
+                  value={
+                    recommendationType ===
+                    "hybrid"
+                      ? "Hybrid AI"
+                      : "Cold Start"
+                  }
+                />
+
+                <InfoCard
+                  title="Movies Found"
+                  value={
+                    recommendations.length
+                  }
+                />
+
+                <InfoCard
+                  title="User Profile"
+                  value={
+                    hasProfile
+                      ? "Personalized"
+                      : "Building Profile"
+                  }
+                />
+              </section>
+
+              {/* MESSAGE */}
+
+              {message && (
+                <section className="mb-10 rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
+                  <div className="flex gap-4">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-500/10 text-xl">
+                      🤖
+                    </div>
+
+                    <div>
+                      <h2 className="font-semibold">
+                        Recommendation Engine
+                      </h2>
+
+                      <p className="mt-2 text-sm leading-6 text-slate-400">
+                        {message}
+                      </p>
+                    </div>
                   </div>
+                </section>
+              )}
 
+              {/* MOVIES */}
+
+              <section>
+                <div className="mb-7 flex items-end justify-between">
                   <div>
-                    <h2 className="font-semibold">
-                      Recommendation Engine
-                    </h2>
-
-                    <p className="mt-2 text-sm leading-6 text-slate-400">
-                      {message}
+                    <p className="mb-2 text-sm font-semibold uppercase tracking-widest text-blue-500">
+                      AI selected
                     </p>
+
+                    <h2 className="text-3xl font-bold">
+                      Recommended Movies
+                    </h2>
                   </div>
+
+                  <button
+                    type="button"
+                    onClick={
+                      loadRecommendations
+                    }
+                    className="rounded-lg border border-slate-700 px-4 py-2 text-sm text-slate-300 transition hover:border-blue-500 hover:text-white"
+                  >
+                    Refresh
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-2 gap-5 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
+                  {recommendations.map(
+                    (movie) => (
+                      <div
+                        key={
+                          movie.movieId
+                        }
+                        className="group"
+                      >
+                        <MovieCard
+                          movie={movie}
+                        />
+
+                        <RecommendationReason
+                          movie={movie}
+                        />
+                      </div>
+                    )
+                  )}
                 </div>
               </section>
-            )}
 
-            <section>
-              <div className="mb-7 flex items-end justify-between">
-                <div>
-                  <p className="mb-2 text-sm font-semibold uppercase tracking-widest text-blue-500">
-                    AI selected
-                  </p>
+              {/* ALGORITHM */}
 
-                  <h2 className="text-3xl font-bold">
-                    Recommended Movies
-                  </h2>
-                </div>
+              {algorithm && (
+                <AlgorithmSection
+                  algorithm={algorithm}
+                />
+              )}
+            </>
+          )}
 
-                <button
-                  onClick={loadRecommendations}
-                  className="rounded-lg border border-slate-700 px-4 py-2 text-sm text-slate-300 transition hover:border-blue-500 hover:text-white"
-                >
-                  Refresh
-                </button>
-              </div>
-
-              <div className="grid grid-cols-2 gap-5 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
-                {recommendations.map((movie) => (
-                  <div
-                    key={movie.movieId}
-                    className="group"
-                  >
-                    <MovieCard movie={movie} />
-
-                    <RecommendationReason
-                      movie={movie}
-                    />
-                  </div>
-                ))}
-              </div>
-            </section>
-
-            {algorithm && (
-              <AlgorithmSection
-                algorithm={algorithm}
-              />
-            )}
-          </>
-        )}
+        {/* EMPTY */}
 
         {!loading &&
           !error &&
           recommendations.length === 0 && (
             <EmptyRecommendations
-              onRefresh={loadRecommendations}
+              onRefresh={
+                loadRecommendations
+              }
             />
           )}
       </main>
@@ -211,57 +283,12 @@ function Recommendations() {
   );
 }
 
-function Navbar() {
-  return (
-    <header className="fixed left-0 right-0 top-0 z-50 border-b border-white/5 bg-slate-950/80 backdrop-blur-xl">
-      <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
-        <Link
-          to="/"
-          className="text-2xl font-black tracking-tight"
-        >
-          Movie
-          <span className="text-blue-500">
-            AI
-          </span>
-        </Link>
+/* INFO CARD */
 
-        <nav className="hidden items-center gap-8 md:flex">
-          <Link
-            to="/"
-            className="text-sm text-slate-400 transition hover:text-white"
-          >
-            Home
-          </Link>
-
-          <Link
-            to="/recommendations"
-            className="text-sm font-semibold text-white"
-          >
-            Recommendations
-          </Link>
-        </nav>
-
-        <div className="flex gap-3">
-          <Link
-            to="/login"
-            className="rounded-lg border border-slate-700 px-4 py-2 text-sm transition hover:border-blue-500"
-          >
-            Login
-          </Link>
-
-          <Link
-            to="/register"
-            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold transition hover:bg-blue-500"
-          >
-            Sign Up
-          </Link>
-        </div>
-      </div>
-    </header>
-  );
-}
-
-function InfoCard({ title, value }) {
+function InfoCard({
+  title,
+  value
+}) {
   return (
     <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
       <p className="text-sm text-slate-500">
@@ -275,7 +302,11 @@ function InfoCard({ title, value }) {
   );
 }
 
-function RecommendationReason({ movie }) {
+/* RECOMMENDATION REASON */
+
+function RecommendationReason({
+  movie
+}) {
   if (!movie.reason) {
     return null;
   }
@@ -293,8 +324,13 @@ function RecommendationReason({ movie }) {
   );
 }
 
-function AlgorithmSection({ algorithm }) {
-  const entries = Object.entries(algorithm);
+/* ALGORITHM SECTION */
+
+function AlgorithmSection({
+  algorithm
+}) {
+  const entries =
+    Object.entries(algorithm);
 
   if (!entries.length) {
     return null;
@@ -318,43 +354,62 @@ function AlgorithmSection({ algorithm }) {
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {entries.map(([key, value]) => (
-          <div
-            key={key}
-            className="rounded-xl border border-slate-800 bg-slate-950/70 p-5"
-          >
-            <p className="text-xs uppercase tracking-wider text-slate-500">
-              {formatLabel(key)}
-            </p>
+        {entries.map(
+          ([key, value]) => (
+            <div
+              key={key}
+              className="rounded-xl border border-slate-800 bg-slate-950/70 p-5"
+            >
+              <p className="text-xs uppercase tracking-wider text-slate-500">
+                {formatLabel(key)}
+              </p>
 
-            <p className="mt-3 text-2xl font-bold text-blue-400">
-              {typeof value === "number"
-                ? value <= 1
-                  ? `${(value * 100).toFixed(0)}%`
-                  : value
-                : String(value)}
-            </p>
-          </div>
-        ))}
+              <p className="mt-3 text-2xl font-bold text-blue-400">
+                {typeof value ===
+                "number"
+                  ? value <= 1
+                    ? `${(
+                        value * 100
+                      ).toFixed(0)}%`
+                    : value
+                  : String(value)}
+              </p>
+            </div>
+          )
+        )}
       </div>
     </section>
   );
 }
 
+/* FORMAT LABEL */
+
 function formatLabel(value) {
   return value
-    .replace(/([A-Z])/g, " $1")
-    .replace(/_/g, " ")
-    .replace(/^./, (char) =>
-      char.toUpperCase()
+    .replace(
+      /([A-Z])/g,
+      " $1"
+    )
+    .replace(
+      /_/g,
+      " "
+    )
+    .replace(
+      /^./,
+      (char) =>
+        char.toUpperCase()
     );
 }
+
+/* LOADING SKELETON */
 
 function RecommendationSkeleton() {
   return (
     <div>
       <div className="mb-10 grid gap-5 md:grid-cols-3">
-        {Array.from({ length: 3 }).map(
+        {Array.from({
+          length: 3,
+        }).map(
           (_, index) => (
             <div
               key={index}
@@ -365,7 +420,9 @@ function RecommendationSkeleton() {
       </div>
 
       <div className="grid grid-cols-2 gap-5 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
-        {Array.from({ length: 12 }).map(
+        {Array.from({
+          length: 12,
+        }).map(
           (_, index) => (
             <div
               key={index}
@@ -386,7 +443,11 @@ function RecommendationSkeleton() {
   );
 }
 
-function EmptyRecommendations({ onRefresh }) {
+/* EMPTY RECOMMENDATIONS */
+
+function EmptyRecommendations({
+  onRefresh
+}) {
   return (
     <section className="flex min-h-[400px] items-center justify-center rounded-3xl border border-slate-800 bg-slate-900/30">
       <div className="max-w-lg px-6 text-center">
@@ -412,6 +473,7 @@ function EmptyRecommendations({ onRefresh }) {
           </Link>
 
           <button
+            type="button"
             onClick={onRefresh}
             className="rounded-xl border border-slate-700 px-5 py-3 font-semibold transition hover:border-blue-500"
           >
@@ -422,6 +484,8 @@ function EmptyRecommendations({ onRefresh }) {
     </section>
   );
 }
+
+/* FOOTER */
 
 function Footer() {
   return (

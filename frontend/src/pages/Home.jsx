@@ -3,13 +3,20 @@ import { Link } from "react-router-dom";
 
 import api from "../services/api";
 import MovieCard from "../components/MovieCard";
+import Navbar from "../components/Navbar";
 
 function Home() {
-  const [trendingMovies, setTrendingMovies] = useState([]);
-  const [popularMovies, setPopularMovies] = useState([]);
+  const [trendingMovies, setTrendingMovies] =
+    useState([]);
 
-  const [loadingTrending, setLoadingTrending] = useState(true);
-  const [loadingPopular, setLoadingPopular] = useState(true);
+  const [popularMovies, setPopularMovies] =
+    useState([]);
+
+  const [loadingTrending, setLoadingTrending] =
+    useState(true);
+
+  const [loadingPopular, setLoadingPopular] =
+    useState(true);
 
   const [error, setError] = useState("");
 
@@ -21,11 +28,17 @@ function Home() {
     setError("");
 
     try {
-      const [trendingResponse, popularResponse] =
-        await Promise.all([
-          api.get("/movies/trending?limit=10&days=30"),
-          api.get("/movies/popular?limit=10&minimum_ratings=3"),
-        ]);
+      const [
+        trendingResponse,
+        popularResponse,
+      ] = await Promise.all([
+        api.get(
+          "/movies/trending?limit=10&days=30"
+        ),
+        api.get(
+          "/movies/popular?limit=10&minimum_ratings=3"
+        ),
+      ]);
 
       setTrendingMovies(
         trendingResponse.data?.movies || []
@@ -59,65 +72,13 @@ function Home() {
   return (
     <div className="min-h-screen bg-slate-950 text-white">
 
-      {/* =====================================================
-          NAVBAR
-      ===================================================== */}
+      {/* NAVBAR */}
 
-      <header className="fixed left-0 right-0 top-0 z-50 border-b border-white/5 bg-slate-950/80 backdrop-blur-xl">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
+      <Navbar />
 
-          <Link
-            to="/"
-            className="text-2xl font-black tracking-tight"
-          >
-            Movie<span className="text-blue-500">AI</span>
-          </Link>
-
-          <nav className="hidden items-center gap-8 md:flex">
-
-            <Link
-              to="/"
-              className="text-sm font-medium text-white transition hover:text-blue-400"
-            >
-              Home
-            </Link>
-
-            <Link
-              to="/recommendations"
-              className="text-sm font-medium text-slate-400 transition hover:text-white"
-            >
-              Recommendations
-            </Link>
-
-          </nav>
-
-          <div className="flex items-center gap-3">
-
-            <Link
-              to="/login"
-              className="rounded-lg border border-slate-700 px-4 py-2 text-sm font-medium text-slate-200 transition hover:border-blue-500 hover:text-white"
-            >
-              Login
-            </Link>
-
-            <Link
-              to="/register"
-              className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-500"
-            >
-              Sign Up
-            </Link>
-
-          </div>
-
-        </div>
-      </header>
-
-      {/* =====================================================
-          HERO
-      ===================================================== */}
+      {/* HERO */}
 
       <section className="relative min-h-[650px] overflow-hidden">
-
         {heroMovie?.backdropUrl ? (
           <img
             src={heroMovie.backdropUrl}
@@ -133,7 +94,6 @@ function Home() {
         <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-transparent to-slate-950/30" />
 
         <div className="relative mx-auto flex min-h-[650px] max-w-7xl items-center px-6 pt-20">
-
           <div className="max-w-2xl">
 
             <span className="mb-5 inline-flex rounded-full border border-blue-400/20 bg-blue-500/10 px-4 py-2 text-sm font-semibold text-blue-400">
@@ -141,12 +101,11 @@ function Home() {
             </span>
 
             <h1 className="text-5xl font-black leading-tight tracking-tight md:text-7xl">
-
               Discover Your Next
+
               <span className="block text-blue-500">
                 Favorite Movie
               </span>
-
             </h1>
 
             <p className="mt-6 max-w-xl text-lg leading-8 text-slate-300">
@@ -156,7 +115,6 @@ function Home() {
             </p>
 
             <div className="mt-8 flex flex-wrap gap-4">
-
               <Link
                 to="/recommendations"
                 className="rounded-xl bg-blue-600 px-6 py-3 font-semibold text-white transition hover:bg-blue-500"
@@ -172,20 +130,16 @@ function Home() {
                   View Movie
                 </Link>
               )}
-
             </div>
-
           </div>
-
         </div>
-
       </section>
 
-      {/* =====================================================
-          MAIN CONTENT
-      ===================================================== */}
+      {/* MAIN CONTENT */}
 
       <main className="mx-auto max-w-7xl px-6 py-16">
+
+        {/* ERROR */}
 
         {error && (
           <div className="mb-10 rounded-xl border border-red-500/20 bg-red-500/10 px-5 py-4 text-sm text-red-300">
@@ -193,14 +147,10 @@ function Home() {
           </div>
         )}
 
-        {/* ===================================================
-            TRENDING
-        =================================================== */}
+        {/* TRENDING MOVIES */}
 
         <section className="mb-16">
-
           <div className="mb-7 flex items-end justify-between">
-
             <div>
               <p className="mb-2 text-sm font-semibold uppercase tracking-widest text-blue-500">
                 What's hot
@@ -214,34 +164,32 @@ function Home() {
             <span className="hidden text-sm text-slate-500 sm:block">
               Last 30 days
             </span>
-
           </div>
 
           {loadingTrending ? (
             <MovieSkeleton />
           ) : trendingMovies.length > 0 ? (
             <div className="grid grid-cols-2 gap-5 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
-              {trendingMovies.map((movie) => (
-                <MovieCard
-                  key={movie.movieId}
-                  movie={movie}
-                />
-              ))}
+              {trendingMovies.map(
+                (movie) => (
+                  <MovieCard
+                    key={movie.movieId}
+                    movie={movie}
+                  />
+                )
+              )}
             </div>
           ) : (
-            <EmptyState message="No trending movies available yet." />
+            <EmptyState
+              message="No trending movies available yet."
+            />
           )}
-
         </section>
 
-        {/* ===================================================
-            POPULAR
-        =================================================== */}
+        {/* POPULAR MOVIES */}
 
         <section className="mb-16">
-
           <div className="mb-7">
-
             <p className="mb-2 text-sm font-semibold uppercase tracking-widest text-blue-500">
               Most watched
             </p>
@@ -249,34 +197,32 @@ function Home() {
             <h2 className="text-3xl font-bold">
               Popular Movies
             </h2>
-
           </div>
 
           {loadingPopular ? (
             <MovieSkeleton />
           ) : popularMovies.length > 0 ? (
             <div className="grid grid-cols-2 gap-5 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
-              {popularMovies.map((movie) => (
-                <MovieCard
-                  key={movie.movieId}
-                  movie={movie}
-                />
-              ))}
+              {popularMovies.map(
+                (movie) => (
+                  <MovieCard
+                    key={movie.movieId}
+                    movie={movie}
+                  />
+                )
+              )}
             </div>
           ) : (
-            <EmptyState message="No popular movies available yet." />
+            <EmptyState
+              message="No popular movies available yet."
+            />
           )}
-
         </section>
 
-        {/* ===================================================
-            CTA
-        =================================================== */}
+        {/* PERSONALIZED CTA */}
 
         <section className="overflow-hidden rounded-3xl border border-blue-500/20 bg-gradient-to-br from-blue-600/20 via-slate-900 to-slate-900 p-8 md:p-12">
-
           <div className="max-w-2xl">
-
             <p className="text-sm font-semibold uppercase tracking-widest text-blue-400">
               Personalized for you
             </p>
@@ -298,21 +244,14 @@ function Home() {
             >
               Explore Recommendations
             </Link>
-
           </div>
-
         </section>
-
       </main>
 
-      {/* =====================================================
-          FOOTER
-      ===================================================== */}
+      {/* FOOTER */}
 
       <footer className="border-t border-slate-800">
-
         <div className="mx-auto flex max-w-7xl flex-col gap-4 px-6 py-8 text-sm text-slate-500 sm:flex-row sm:items-center sm:justify-between">
-
           <p>
             © {new Date().getFullYear()} MovieAI
           </p>
@@ -320,24 +259,17 @@ function Home() {
           <p>
             AI-powered movie recommendation system
           </p>
-
         </div>
-
       </footer>
-
     </div>
   );
 }
 
-
-/* ============================================================
-   LOADING SKELETON
-============================================================ */
+/* LOADING SKELETON */
 
 function MovieSkeleton() {
   return (
     <div className="grid grid-cols-2 gap-5 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
-
       {Array.from({ length: 5 }).map(
         (_, index) => (
           <div
@@ -347,29 +279,22 @@ function MovieSkeleton() {
             <div className="aspect-[2/3] animate-pulse bg-slate-800" />
 
             <div className="space-y-3 p-4">
-
               <div className="h-4 animate-pulse rounded bg-slate-800" />
 
               <div className="h-3 w-2/3 animate-pulse rounded bg-slate-800" />
-
             </div>
           </div>
         )
       )}
-
     </div>
   );
 }
 
-
-/* ============================================================
-   EMPTY STATE
-============================================================ */
+/* EMPTY STATE */
 
 function EmptyState({ message }) {
   return (
     <div className="rounded-xl border border-slate-800 bg-slate-900/50 px-6 py-12 text-center">
-
       <div className="text-4xl">
         🎬
       </div>
@@ -377,10 +302,8 @@ function EmptyState({ message }) {
       <p className="mt-4 text-sm text-slate-500">
         {message}
       </p>
-
     </div>
   );
 }
-
 
 export default Home;

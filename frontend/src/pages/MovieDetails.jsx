@@ -3,15 +3,21 @@ import { Link, useParams } from "react-router-dom";
 
 import api from "../services/api";
 import MovieCard from "../components/MovieCard";
+import Navbar from "../components/Navbar";
 
 function MovieDetails() {
   const { movieId } = useParams();
 
   const [movie, setMovie] = useState(null);
-  const [recommendations, setRecommendations] = useState([]);
 
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const [recommendations, setRecommendations] =
+    useState([]);
+
+  const [loading, setLoading] =
+    useState(true);
+
+  const [error, setError] =
+    useState("");
 
   useEffect(() => {
     loadMovie();
@@ -22,9 +28,10 @@ function MovieDetails() {
     setError("");
 
     try {
-      const movieResponse = await api.get(
-        `/movies/${movieId}`
-      );
+      const movieResponse =
+        await api.get(
+          `/movies/${movieId}`
+        );
 
       const movieData =
         movieResponse.data?.movie;
@@ -41,8 +48,8 @@ function MovieDetails() {
             );
 
           setRecommendations(
-            recommendationResponse.data?.recommendations ||
-              []
+            recommendationResponse.data
+              ?.recommendations || []
           );
         } catch (recommendationError) {
           console.warn(
@@ -68,20 +75,23 @@ function MovieDetails() {
     }
   };
 
+  /* LOADING */
+
   if (loading) {
-    return <LoadingState />;
+    return (
+      <LoadingState />
+    );
   }
+
+  /* ERROR */
 
   if (error || !movie) {
     return (
       <div className="min-h-screen bg-slate-950 text-white">
-
         <Navbar />
 
         <main className="flex min-h-[70vh] items-center justify-center px-6">
-
           <div className="text-center">
-
             <div className="text-6xl">
               🎬
             </div>
@@ -91,7 +101,8 @@ function MovieDetails() {
             </h1>
 
             <p className="mt-3 text-slate-500">
-              {error || "The requested movie could not be found."}
+              {error ||
+                "The requested movie could not be found."}
             </p>
 
             <Link
@@ -100,11 +111,8 @@ function MovieDetails() {
             >
               Back to Home
             </Link>
-
           </div>
-
         </main>
-
       </div>
     );
   }
@@ -119,20 +127,16 @@ function MovieDetails() {
     poster ||
     null;
 
-  const averageRating =
-    movie.averageRating ??
-    movie.tmdbRating ??
-    null;
-
   return (
     <div className="min-h-screen bg-slate-950 text-white">
 
+      {/* NAVBAR */}
+
       <Navbar />
 
-      {/* HERO */}
+      {/* MOVIE HERO */}
 
       <section className="relative min-h-[650px] overflow-hidden">
-
         {backdrop ? (
           <img
             src={backdrop}
@@ -148,15 +152,12 @@ function MovieDetails() {
         <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/40 to-slate-950/20" />
 
         <div className="relative mx-auto flex min-h-[650px] max-w-7xl items-end px-6 pb-16 pt-32">
-
           <div className="grid w-full gap-10 md:grid-cols-[250px_1fr]">
 
             {/* POSTER */}
 
             <div className="hidden md:block">
-
               <div className="overflow-hidden rounded-2xl border border-white/10 bg-slate-900 shadow-2xl">
-
                 {poster ? (
                   <img
                     src={poster}
@@ -168,21 +169,24 @@ function MovieDetails() {
                     🎬
                   </div>
                 )}
-
               </div>
-
             </div>
 
-            {/* DETAILS */}
+            {/* MOVIE INFORMATION */}
 
             <div className="flex flex-col justify-end">
 
-              <div className="mb-4 flex flex-wrap gap-2">
+              {/* RATINGS */}
 
+              <div className="mb-4 flex flex-wrap gap-2">
                 {movie.tmdbRating !== null &&
                   movie.tmdbRating !== undefined && (
                     <span className="rounded-full bg-yellow-500/15 px-3 py-1 text-sm font-semibold text-yellow-400">
-                      ⭐ {Number(movie.tmdbRating).toFixed(1)} TMDB
+                      ⭐{" "}
+                      {Number(
+                        movie.tmdbRating
+                      ).toFixed(1)}{" "}
+                      TMDB
                     </span>
                   )}
 
@@ -198,33 +202,41 @@ function MovieDetails() {
 
                 {movie.releaseDate && (
                   <span className="rounded-full bg-white/10 px-3 py-1 text-sm text-slate-300">
-                    {movie.releaseDate.slice(0, 4)}
+                    {movie.releaseDate.slice(
+                      0,
+                      4
+                    )}
                   </span>
                 )}
-
               </div>
+
+              {/* TITLE */}
 
               <h1 className="max-w-4xl text-4xl font-black leading-tight md:text-6xl">
                 {movie.title}
               </h1>
 
+              {/* GENRES */}
+
               {movie.genres && (
                 <div className="mt-5 flex flex-wrap gap-2">
-
                   {movie.genres
                     .split("|")
                     .filter(Boolean)
-                    .map((genre) => (
-                      <span
-                        key={genre}
-                        className="rounded-lg border border-slate-700 bg-black/20 px-3 py-1 text-sm text-slate-300 backdrop-blur"
-                      >
-                        {genre}
-                      </span>
-                    ))}
-
+                    .map(
+                      (genre) => (
+                        <span
+                          key={genre}
+                          className="rounded-lg border border-slate-700 bg-black/20 px-3 py-1 text-sm text-slate-300 backdrop-blur"
+                        >
+                          {genre}
+                        </span>
+                      )
+                    )}
                 </div>
               )}
+
+              {/* OVERVIEW */}
 
               {movie.overview && (
                 <p className="mt-7 max-w-3xl text-base leading-8 text-slate-300 md:text-lg">
@@ -232,8 +244,9 @@ function MovieDetails() {
                 </p>
               )}
 
-              <div className="mt-8 flex flex-wrap gap-4">
+              {/* ACTIONS */}
 
+              <div className="mt-8 flex flex-wrap gap-4">
                 <Link
                   to="/recommendations"
                   className="rounded-xl bg-blue-600 px-6 py-3 font-semibold transition hover:bg-blue-500"
@@ -247,23 +260,16 @@ function MovieDetails() {
                 >
                   Back Home
                 </Link>
-
               </div>
-
             </div>
-
           </div>
-
         </div>
-
       </section>
 
       {/* MOVIE INFORMATION */}
 
       <main className="mx-auto max-w-7xl px-6 py-16">
-
         <section className="grid gap-6 md:grid-cols-3">
-
           <InfoCard
             title="TMDB Rating"
             value={
@@ -295,16 +301,13 @@ function MovieDetails() {
               "Not available"
             }
           />
-
         </section>
 
         {/* SIMILAR MOVIES */}
 
         {recommendations.length > 0 && (
           <section className="mt-20">
-
             <div className="mb-8">
-
               <p className="mb-2 text-sm font-semibold uppercase tracking-widest text-blue-500">
                 Based on this movie
               </p>
@@ -316,104 +319,43 @@ function MovieDetails() {
               <p className="mt-2 text-slate-500">
                 Movies selected using content similarity.
               </p>
-
             </div>
 
             <div className="grid grid-cols-2 gap-5 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
-
               {recommendations.map(
                 (recommendation) => (
                   <MovieCard
-                    key={recommendation.movieId}
+                    key={
+                      recommendation.movieId
+                    }
                     movie={recommendation}
                   />
                 )
               )}
-
             </div>
-
           </section>
         )}
-
       </main>
 
       {/* FOOTER */}
 
       <footer className="border-t border-slate-800">
-
         <div className="mx-auto max-w-7xl px-6 py-8 text-center text-sm text-slate-500">
           MovieAI — AI-powered movie recommendations
         </div>
-
       </footer>
-
     </div>
   );
 }
 
+/* INFO CARD */
 
-function Navbar() {
-  return (
-    <header className="fixed left-0 right-0 top-0 z-50 border-b border-white/5 bg-slate-950/75 backdrop-blur-xl">
-
-      <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
-
-        <Link
-          to="/"
-          className="text-2xl font-black tracking-tight"
-        >
-          Movie<span className="text-blue-500">
-            AI
-          </span>
-        </Link>
-
-        <nav className="hidden items-center gap-8 md:flex">
-
-          <Link
-            to="/"
-            className="text-sm font-medium text-slate-300 transition hover:text-white"
-          >
-            Home
-          </Link>
-
-          <Link
-            to="/recommendations"
-            className="text-sm font-medium text-slate-300 transition hover:text-white"
-          >
-            Recommendations
-          </Link>
-
-        </nav>
-
-        <div className="flex items-center gap-3">
-
-          <Link
-            to="/login"
-            className="rounded-lg border border-slate-700 px-4 py-2 text-sm font-medium transition hover:border-blue-500"
-          >
-            Login
-          </Link>
-
-          <Link
-            to="/register"
-            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold transition hover:bg-blue-500"
-          >
-            Sign Up
-          </Link>
-
-        </div>
-
-      </div>
-
-    </header>
-  );
-}
-
-
-function InfoCard({ title, value }) {
+function InfoCard({
+  title,
+  value
+}) {
   return (
     <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
-
       <p className="text-sm text-slate-500">
         {title}
       </p>
@@ -421,26 +363,22 @@ function InfoCard({ title, value }) {
       <p className="mt-3 text-xl font-bold text-white">
         {value}
       </p>
-
     </div>
   );
 }
 
+/* LOADING STATE */
 
 function LoadingState() {
   return (
     <div className="min-h-screen bg-slate-950">
-
       <Navbar />
 
       <div className="mx-auto max-w-7xl px-6 pt-32">
-
         <div className="grid gap-10 md:grid-cols-[250px_1fr]">
-
           <div className="hidden aspect-[2/3] animate-pulse rounded-2xl bg-slate-900 md:block" />
 
           <div className="space-y-6">
-
             <div className="h-8 w-32 animate-pulse rounded bg-slate-900" />
 
             <div className="h-16 max-w-2xl animate-pulse rounded bg-slate-900" />
@@ -448,16 +386,11 @@ function LoadingState() {
             <div className="h-24 max-w-3xl animate-pulse rounded bg-slate-900" />
 
             <div className="h-12 w-48 animate-pulse rounded bg-slate-900" />
-
           </div>
-
         </div>
-
       </div>
-
     </div>
   );
 }
-
 
 export default MovieDetails;
