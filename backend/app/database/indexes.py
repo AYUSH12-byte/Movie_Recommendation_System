@@ -7,21 +7,27 @@ from app.database.database import (
 
 def create_indexes():
 
-    # Users
+    # USERS
 
     users_collection.create_index(
         "email",
         unique=True
     )
 
-    # Movies
+
+    # MOVIES
 
     movies_collection.create_index(
         "movieId",
         unique=True
     )
 
-    # Ratings
+    movies_collection.create_index(
+        "tmdbId"
+    )
+
+
+    # RATINGS
 
     ratings_collection.create_index(
         [
