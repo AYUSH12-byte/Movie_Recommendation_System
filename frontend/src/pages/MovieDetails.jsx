@@ -1,262 +1,113 @@
 import { useEffect, useState } from "react";
-import {
-  Link,
-  useNavigate,
-  useParams,
-} from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 
 import api from "../services/api";
-import { useAuth } from "../context/AuthContext";
+import MovieCard from "../components/MovieCard";
 
 function MovieDetails() {
   const { movieId } = useParams();
-  const navigate = useNavigate();
-
-  const {
-    user,
-    isAuthenticated,
-  } = useAuth();
 
   const [movie, setMovie] = useState(null);
-  const [userRating, setUserRating] = useState(null);
-  const [selectedRating, setSelectedRating] = useState(0);
+  const [recommendations, setRecommendations] = useState([]);
 
   const [loading, setLoading] = useState(true);
-  const [ratingLoading, setRatingLoading] = useState(false);
-
   const [error, setError] = useState("");
-  const [ratingMessage, setRatingMessage] = useState("");
-
-
-  // ==========================================================
-  // FETCH MOVIE
-  // ==========================================================
 
   useEffect(() => {
-    const fetchMovie = async () => {
-      try {
-        setLoading(true);
-        setError("");
-
-        const response = await api.get(
-          `/movies/${movieId}`
-        );
-
-        console.log(
-          "MOVIE DETAILS RESPONSE:",
-          response.data
-        );
-
-        setMovie(
-          response.data.movie
-        );
-
-      } catch (err) {
-        console.error(
-          "Failed to fetch movie:",
-          err
-        );
-
-        setError(
-          err.response?.data?.detail ||
-          "Failed to load movie details."
-        );
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchMovie();
+    loadMovie();
   }, [movieId]);
 
-
-  // ==========================================================
-  // FETCH USER RATING
-  // ==========================================================
-
-  useEffect(() => {
-    if (!isAuthenticated) {
-      return;
-    }
-
-    const fetchUserRating = async () => {
-      try {
-        const response = await api.get(
-          `/ratings/movie/${movieId}`
-        );
-
-        console.log(
-          "USER RATING:",
-          response.data
-        );
-
-        const rating =
-          response.data.rating ??
-          response.data.userRating ??
-          null;
-
-        setUserRating(rating);
-
-        if (rating) {
-          setSelectedRating(
-            Number(rating)
-          );
-        }
-
-      } catch (err) {
-        console.log(
-          "No existing user rating.",
-          err.response?.data
-        );
-      }
-    };
-
-    fetchUserRating();
-
-  }, [
-    movieId,
-    isAuthenticated
-  ]);
-
-
-  // ==========================================================
-  // SUBMIT RATING
-  // ==========================================================
-
-  const handleRating = async () => {
-    if (!isAuthenticated) {
-      navigate("/login");
-      return;
-    }
-
-    if (!selectedRating) {
-      setRatingMessage(
-        "Please select a rating first."
-      );
-      return;
-    }
+  const loadMovie = async () => {
+    setLoading(true);
+    setError("");
 
     try {
-      setRatingLoading(true);
-      setRatingMessage("");
+      const movieResponse = await api.get(
+        `/movies/${movieId}`
+      );
 
-      const response = await api.post(
-        "/ratings/",
-        {
-          movieId: Number(movieId),
-          rating: Number(selectedRating),
+      const movieData =
+        movieResponse.data?.movie;
+
+      setMovie(movieData || null);
+
+      if (movieData?.title) {
+        try {
+          const recommendationResponse =
+            await api.get(
+              `/recommendations/movie?title=${encodeURIComponent(
+                movieData.title
+              )}&limit=6`
+            );
+
+          setRecommendations(
+            recommendationResponse.data?.recommendations ||
+              []
+          );
+        } catch (recommendationError) {
+          console.warn(
+            "Movie recommendations unavailable:",
+            recommendationError
+          );
+
+          setRecommendations([]);
         }
-      );
-
-      console.log(
-        "RATING RESPONSE:",
-        response.data
-      );
-
-      setUserRating(
-        Number(selectedRating)
-      );
-
-      setRatingMessage(
-        "Your rating has been saved successfully."
-      );
-
-    } catch (err) {
+      }
+    } catch (error) {
       console.error(
-        "Failed to submit rating:",
-        err
+        "Failed to load movie:",
+        error
       );
 
-      setRatingMessage(
-        err.response?.data?.detail ||
-        "Failed to save your rating."
+      setError(
+        error.response?.data?.detail ||
+          "Unable to load movie details."
       );
-
     } finally {
-      setRatingLoading(false);
+      setLoading(false);
     }
   };
 
-
-  // ==========================================================
-  // LOADING
-  // ==========================================================
-
   if (loading) {
-    return (
-      <div className="min-h-screen bg-slate-950 text-white">
-
-        <div className="mx-auto max-w-7xl px-6 py-10">
-
-          <div className="animate-pulse">
-
-            <div className="mb-8 h-6 w-32 rounded bg-slate-800" />
-
-            <div className="grid gap-10 md:grid-cols-[280px_1fr]">
-
-              <div className="aspect-[2/3] rounded-2xl bg-slate-800" />
-
-              <div className="space-y-5">
-
-                <div className="h-10 w-2/3 rounded bg-slate-800" />
-
-                <div className="h-5 w-1/3 rounded bg-slate-800" />
-
-                <div className="h-24 rounded bg-slate-800" />
-
-              </div>
-
-            </div>
-
-          </div>
-
-        </div>
-
-      </div>
-    );
+    return <LoadingState />;
   }
-
-
-  // ==========================================================
-  // ERROR
-  // ==========================================================
 
   if (error || !movie) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-950 px-6 text-white">
+      <div className="min-h-screen bg-slate-950 text-white">
 
-        <div className="max-w-md text-center">
+        <Navbar />
 
-          <div className="mb-4 text-6xl">
-            🎬
+        <main className="flex min-h-[70vh] items-center justify-center px-6">
+
+          <div className="text-center">
+
+            <div className="text-6xl">
+              🎬
+            </div>
+
+            <h1 className="mt-6 text-2xl font-bold">
+              Movie Not Found
+            </h1>
+
+            <p className="mt-3 text-slate-500">
+              {error || "The requested movie could not be found."}
+            </p>
+
+            <Link
+              to="/"
+              className="mt-7 inline-block rounded-xl bg-blue-600 px-6 py-3 font-semibold transition hover:bg-blue-500"
+            >
+              Back to Home
+            </Link>
+
           </div>
 
-          <h1 className="text-2xl font-bold">
-            Movie Not Found
-          </h1>
-
-          <p className="mt-3 text-slate-400">
-            {error ||
-              "The requested movie could not be found."}
-          </p>
-
-          <Link
-            to="/recommendations"
-            className="mt-6 inline-flex rounded-lg bg-blue-600 px-5 py-3 font-semibold transition hover:bg-blue-500"
-          >
-            ← Back to Movies
-          </Link>
-
-        </div>
+        </main>
 
       </div>
     );
   }
-
-
-  // ==========================================================
-  // MOVIE DATA
-  // ==========================================================
 
   const poster =
     movie.posterUrl ||
@@ -265,225 +116,139 @@ function MovieDetails() {
 
   const backdrop =
     movie.backdropUrl ||
+    poster ||
     null;
 
   const averageRating =
     movie.averageRating ??
-    movie.communityRating ??
-    null;
-
-  const ratingCount =
-    movie.totalRatings ??
-    movie.ratingCount ??
-    null;
-
-  const tmdbRating =
     movie.tmdbRating ??
     null;
-
-  const releaseDate =
-    movie.releaseDate ||
-    null;
-
-  const genres =
-    movie.genres
-      ? movie.genres.split("|")
-      : [];
-
-
-  // ==========================================================
-  // UI
-  // ==========================================================
 
   return (
     <div className="min-h-screen bg-slate-950 text-white">
 
-      {/* ================================================== */}
-      {/* BACKDROP */}
-      {/* ================================================== */}
+      <Navbar />
 
-      <section className="relative overflow-hidden">
+      {/* HERO */}
 
-        {backdrop && (
-          <div className="absolute inset-0">
+      <section className="relative min-h-[650px] overflow-hidden">
 
-            <img
-              src={backdrop}
-              alt=""
-              className="h-full w-full object-cover opacity-20"
-            />
-
-            <div className="absolute inset-0 bg-gradient-to-b from-slate-950/40 via-slate-950/80 to-slate-950" />
-
-          </div>
+        {backdrop ? (
+          <img
+            src={backdrop}
+            alt=""
+            className="absolute inset-0 h-full w-full object-cover"
+          />
+        ) : (
+          <div className="absolute inset-0 bg-slate-900" />
         )}
 
-        <div className="relative mx-auto max-w-7xl px-6 py-8">
+        <div className="absolute inset-0 bg-gradient-to-r from-slate-950 via-slate-950/90 to-slate-950/30" />
 
-          {/* Back Button */}
+        <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/40 to-slate-950/20" />
 
-          <Link
-            to="/recommendations"
-            className="inline-flex items-center rounded-lg border border-slate-700 bg-slate-900/70 px-4 py-2 text-sm font-medium text-slate-200 backdrop-blur transition hover:border-blue-500 hover:text-blue-400"
-          >
-            ← Back to Movies
-          </Link>
+        <div className="relative mx-auto flex min-h-[650px] max-w-7xl items-end px-6 pb-16 pt-32">
 
+          <div className="grid w-full gap-10 md:grid-cols-[250px_1fr]">
 
-          {/* ================================================= */}
-          {/* MOVIE CONTENT */}
-          {/* ================================================= */}
+            {/* POSTER */}
 
-          <div className="mt-10 grid gap-10 md:grid-cols-[280px_1fr]">
+            <div className="hidden md:block">
 
-            {/* Poster */}
+              <div className="overflow-hidden rounded-2xl border border-white/10 bg-slate-900 shadow-2xl">
 
-            <div className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-900 shadow-2xl">
-
-              {poster ? (
-                <img
-                  src={poster}
-                  alt={movie.title}
-                  className="h-full w-full object-cover"
-                />
-              ) : (
-                <div className="flex aspect-[2/3] flex-col items-center justify-center gap-3 text-slate-500">
-
-                  <span className="text-6xl">
+                {poster ? (
+                  <img
+                    src={poster}
+                    alt={movie.title}
+                    className="aspect-[2/3] w-full object-cover"
+                  />
+                ) : (
+                  <div className="flex aspect-[2/3] items-center justify-center text-5xl">
                     🎬
-                  </span>
+                  </div>
+                )}
 
-                  <span>
-                    No poster available
-                  </span>
-
-                </div>
-              )}
+              </div>
 
             </div>
 
+            {/* DETAILS */}
 
-            {/* Movie Info */}
+            <div className="flex flex-col justify-end">
 
-            <div className="flex flex-col justify-center">
+              <div className="mb-4 flex flex-wrap gap-2">
 
-              {/* Title */}
+                {movie.tmdbRating !== null &&
+                  movie.tmdbRating !== undefined && (
+                    <span className="rounded-full bg-yellow-500/15 px-3 py-1 text-sm font-semibold text-yellow-400">
+                      ⭐ {Number(movie.tmdbRating).toFixed(1)} TMDB
+                    </span>
+                  )}
 
-              <h1 className="text-4xl font-extrabold tracking-tight sm:text-5xl">
+                {movie.averageRating !== null &&
+                  movie.averageRating !== undefined && (
+                    <span className="rounded-full bg-blue-500/15 px-3 py-1 text-sm font-semibold text-blue-400">
+                      User Rating{" "}
+                      {Number(
+                        movie.averageRating
+                      ).toFixed(1)}
+                    </span>
+                  )}
 
+                {movie.releaseDate && (
+                  <span className="rounded-full bg-white/10 px-3 py-1 text-sm text-slate-300">
+                    {movie.releaseDate.slice(0, 4)}
+                  </span>
+                )}
+
+              </div>
+
+              <h1 className="max-w-4xl text-4xl font-black leading-tight md:text-6xl">
                 {movie.title}
-
               </h1>
 
-
-              {/* Genres */}
-
-              {genres.length > 0 && (
+              {movie.genres && (
                 <div className="mt-5 flex flex-wrap gap-2">
 
-                  {genres.map(
-                    (genre) => (
+                  {movie.genres
+                    .split("|")
+                    .filter(Boolean)
+                    .map((genre) => (
                       <span
                         key={genre}
-                        className="rounded-full border border-slate-700 bg-slate-900/80 px-3 py-1 text-sm text-slate-300"
+                        className="rounded-lg border border-slate-700 bg-black/20 px-3 py-1 text-sm text-slate-300 backdrop-blur"
                       >
                         {genre}
                       </span>
-                    )
-                  )}
+                    ))}
 
                 </div>
               )}
 
-
-              {/* Ratings */}
-
-              <div className="mt-6 flex flex-wrap gap-4">
-
-                {averageRating !== null && (
-                  <div className="rounded-xl border border-slate-800 bg-slate-900/80 px-4 py-3">
-
-                    <div className="text-xs text-slate-500">
-                      Community Rating
-                    </div>
-
-                    <div className="mt-1 text-lg font-bold">
-                      ⭐{" "}
-                      {Number(
-                        averageRating
-                      ).toFixed(1)}
-                      /5
-                    </div>
-
-                  </div>
-                )}
-
-
-                {ratingCount !== null && (
-                  <div className="rounded-xl border border-slate-800 bg-slate-900/80 px-4 py-3">
-
-                    <div className="text-xs text-slate-500">
-                      Ratings
-                    </div>
-
-                    <div className="mt-1 text-lg font-bold">
-                      {ratingCount}
-                    </div>
-
-                  </div>
-                )}
-
-
-                {tmdbRating !== null && (
-                  <div className="rounded-xl border border-slate-800 bg-slate-900/80 px-4 py-3">
-
-                    <div className="text-xs text-slate-500">
-                      TMDB Rating
-                    </div>
-
-                    <div className="mt-1 text-lg font-bold">
-                      ⭐{" "}
-                      {Number(
-                        tmdbRating
-                      ).toFixed(1)}
-                    </div>
-
-                  </div>
-                )}
-
-              </div>
-
-
-              {/* Release Date */}
-
-              {releaseDate && (
-                <p className="mt-5 text-sm text-slate-400">
-
-                  Release Date:{" "}
-
-                  <span className="font-medium text-slate-200">
-                    {releaseDate}
-                  </span>
-
+              {movie.overview && (
+                <p className="mt-7 max-w-3xl text-base leading-8 text-slate-300 md:text-lg">
+                  {movie.overview}
                 </p>
               )}
 
+              <div className="mt-8 flex flex-wrap gap-4">
 
-              {/* Overview */}
+                <Link
+                  to="/recommendations"
+                  className="rounded-xl bg-blue-600 px-6 py-3 font-semibold transition hover:bg-blue-500"
+                >
+                  Get Similar Movies
+                </Link>
 
-              {movie.overview && (
-                <div className="mt-7 max-w-3xl">
+                <Link
+                  to="/"
+                  className="rounded-xl border border-slate-600 bg-black/20 px-6 py-3 font-semibold backdrop-blur transition hover:border-white"
+                >
+                  Back Home
+                </Link>
 
-                  <h2 className="text-xl font-bold">
-                    Overview
-                  </h2>
-
-                  <p className="mt-3 leading-7 text-slate-400">
-                    {movie.overview}
-                  </p>
-
-                </div>
-              )}
+              </div>
 
             </div>
 
@@ -493,108 +258,206 @@ function MovieDetails() {
 
       </section>
 
+      {/* MOVIE INFORMATION */}
 
-      {/* ================================================== */}
-      {/* RATING SECTION */}
-      {/* ================================================== */}
+      <main className="mx-auto max-w-7xl px-6 py-16">
 
-      <section className="mx-auto max-w-7xl px-6 pb-16">
+        <section className="grid gap-6 md:grid-cols-3">
 
-        <div className="mt-8 max-w-2xl rounded-2xl border border-slate-800 bg-slate-900 p-6">
+          <InfoCard
+            title="TMDB Rating"
+            value={
+              movie.tmdbRating !== null &&
+              movie.tmdbRating !== undefined
+                ? `⭐ ${Number(
+                    movie.tmdbRating
+                  ).toFixed(1)}`
+                : "Not available"
+            }
+          />
 
-          <h2 className="text-xl font-bold">
-            Rate this movie
-          </h2>
+          <InfoCard
+            title="TMDB Votes"
+            value={
+              movie.tmdbVoteCount !== null &&
+              movie.tmdbVoteCount !== undefined
+                ? Number(
+                    movie.tmdbVoteCount
+                  ).toLocaleString()
+                : "Not available"
+            }
+          />
 
-          {isAuthenticated ? (
-            <>
-              <p className="mt-2 text-sm text-slate-400">
-                {userRating
-                  ? `Your current rating: ${userRating}/5`
-                  : "How would you rate this movie?"}
+          <InfoCard
+            title="Release Date"
+            value={
+              movie.releaseDate ||
+              "Not available"
+            }
+          />
+
+        </section>
+
+        {/* SIMILAR MOVIES */}
+
+        {recommendations.length > 0 && (
+          <section className="mt-20">
+
+            <div className="mb-8">
+
+              <p className="mb-2 text-sm font-semibold uppercase tracking-widest text-blue-500">
+                Based on this movie
               </p>
 
+              <h2 className="text-3xl font-bold">
+                You May Also Like
+              </h2>
 
-              {/* Stars */}
-
-              <div className="mt-5 flex gap-2">
-
-                {[1, 2, 3, 4, 5].map(
-                  (star) => (
-                    <button
-                      key={star}
-                      type="button"
-                      onClick={() =>
-                        setSelectedRating(
-                          star
-                        )
-                      }
-                      className={`text-4xl transition ${
-                        star <=
-                        selectedRating
-                          ? "text-yellow-400"
-                          : "text-slate-700"
-                      } hover:scale-110`}
-                    >
-                      ★
-                    </button>
-                  )
-                )}
-
-              </div>
-
-
-              {/* Submit */}
-
-              <button
-                type="button"
-                onClick={handleRating}
-                disabled={
-                  ratingLoading ||
-                  !selectedRating
-                }
-                className="mt-5 rounded-lg bg-blue-600 px-5 py-3 font-semibold transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {ratingLoading
-                  ? "Saving..."
-                  : userRating
-                    ? "Update Rating"
-                    : "Submit Rating"}
-              </button>
-
-
-              {/* Message */}
-
-              {ratingMessage && (
-                <p className="mt-4 text-sm text-slate-300">
-                  {ratingMessage}
-                </p>
-              )}
-
-            </>
-          ) : (
-            <div className="mt-5">
-
-              <p className="text-slate-400">
-                Login to rate this movie.
+              <p className="mt-2 text-slate-500">
+                Movies selected using content similarity.
               </p>
-
-              <Link
-                to="/login"
-                className="mt-4 inline-flex rounded-lg bg-blue-600 px-5 py-3 font-semibold transition hover:bg-blue-500"
-              >
-                Login to Rate
-              </Link>
 
             </div>
-          )}
 
+            <div className="grid grid-cols-2 gap-5 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
+
+              {recommendations.map(
+                (recommendation) => (
+                  <MovieCard
+                    key={recommendation.movieId}
+                    movie={recommendation}
+                  />
+                )
+              )}
+
+            </div>
+
+          </section>
+        )}
+
+      </main>
+
+      {/* FOOTER */}
+
+      <footer className="border-t border-slate-800">
+
+        <div className="mx-auto max-w-7xl px-6 py-8 text-center text-sm text-slate-500">
+          MovieAI — AI-powered movie recommendations
         </div>
 
-      </section>
+      </footer>
 
     </div>
   );
 }
+
+
+function Navbar() {
+  return (
+    <header className="fixed left-0 right-0 top-0 z-50 border-b border-white/5 bg-slate-950/75 backdrop-blur-xl">
+
+      <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
+
+        <Link
+          to="/"
+          className="text-2xl font-black tracking-tight"
+        >
+          Movie<span className="text-blue-500">
+            AI
+          </span>
+        </Link>
+
+        <nav className="hidden items-center gap-8 md:flex">
+
+          <Link
+            to="/"
+            className="text-sm font-medium text-slate-300 transition hover:text-white"
+          >
+            Home
+          </Link>
+
+          <Link
+            to="/recommendations"
+            className="text-sm font-medium text-slate-300 transition hover:text-white"
+          >
+            Recommendations
+          </Link>
+
+        </nav>
+
+        <div className="flex items-center gap-3">
+
+          <Link
+            to="/login"
+            className="rounded-lg border border-slate-700 px-4 py-2 text-sm font-medium transition hover:border-blue-500"
+          >
+            Login
+          </Link>
+
+          <Link
+            to="/register"
+            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold transition hover:bg-blue-500"
+          >
+            Sign Up
+          </Link>
+
+        </div>
+
+      </div>
+
+    </header>
+  );
+}
+
+
+function InfoCard({ title, value }) {
+  return (
+    <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
+
+      <p className="text-sm text-slate-500">
+        {title}
+      </p>
+
+      <p className="mt-3 text-xl font-bold text-white">
+        {value}
+      </p>
+
+    </div>
+  );
+}
+
+
+function LoadingState() {
+  return (
+    <div className="min-h-screen bg-slate-950">
+
+      <Navbar />
+
+      <div className="mx-auto max-w-7xl px-6 pt-32">
+
+        <div className="grid gap-10 md:grid-cols-[250px_1fr]">
+
+          <div className="hidden aspect-[2/3] animate-pulse rounded-2xl bg-slate-900 md:block" />
+
+          <div className="space-y-6">
+
+            <div className="h-8 w-32 animate-pulse rounded bg-slate-900" />
+
+            <div className="h-16 max-w-2xl animate-pulse rounded bg-slate-900" />
+
+            <div className="h-24 max-w-3xl animate-pulse rounded bg-slate-900" />
+
+            <div className="h-12 w-48 animate-pulse rounded bg-slate-900" />
+
+          </div>
+
+        </div>
+
+      </div>
+
+    </div>
+  );
+}
+
 
 export default MovieDetails;
